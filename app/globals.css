@@ -1,30 +1,6 @@
 @import "tailwindcss";
 
 :root {
-<<<<<<< HEAD
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
-}
-
-body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
-=======
   --brand: #FF6B35;
   --brand-light: #FFF0EB;
   --brand-dark: #E55A25;
@@ -45,5 +21,4 @@ body {
 
 * {
   -webkit-tap-highlight-color: transparent;
->>>>>>> 3f45f245777d09941b1fd3d5a9bc48a1cc8df28b
 }
