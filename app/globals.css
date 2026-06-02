@@ -1,0 +1,24 @@
+@import "tailwindcss";
+
+:root {
+  --brand: #FF6B35;
+  --brand-light: #FFF0EB;
+  --brand-dark: #E55A25;
+}
+
+@theme inline {
+  --color-brand: var(--brand);
+  --color-brand-light: var(--brand-light);
+  --color-brand-dark: var(--brand-dark);
+  --font-sans: var(--font-noto), 'Noto Sans KR', sans-serif;
+}
+
+body {
+  background: #f8f8f8;
+  color: #1a1a1a;
+  font-family: var(--font-sans);
+}
+
+* {
+  -webkit-tap-highlight-color: transparent;
+}
