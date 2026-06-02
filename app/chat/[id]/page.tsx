@@ -26,6 +26,7 @@ export default function ChatRoomPage() {
   const { id } = useParams<{ id: string }>()
   const { user, profile } = useAuth()
   const router = useRouter()
+
   const [room, setRoom] = useState<ChatRoom | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
@@ -33,7 +34,9 @@ export default function ChatRoomPage() {
   const [completingInterview, setCompletingInterview] = useState(false)
   const [hasReview, setHasReview] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
 
+  // 채팅방 로드
   const fetchRoom = useCallback(async () => {
     const { data } = await supabase
       .from('chat_rooms')
@@ -45,13 +48,11 @@ export default function ChatRoomPage() {
       `)
       .eq('id', id)
       .maybeSingle()
-    if (!data) {
-      router.push('/chat')
-      return
-    }
+    if (!data) { router.push('/chat'); return }
     setRoom(data as unknown as ChatRoom)
   }, [id, router])
 
+  // 메시지 로드
   const fetchMessages = useCallback(async () => {
     const { data } = await supabase
       .from('messages')
@@ -66,57 +67,66 @@ export default function ChatRoomPage() {
     fetchMessages()
   }, [fetchRoom, fetchMessages])
 
+  // 후기 작성 여부 확인
   useEffect(() => {
     if (!user || !room?.interview_completed) return
-    const checkReview = async () => {
-      const { data } = await supabase
-        .from('reviews')
-        .select('id')
-        .eq('chat_room_id', id)
-        .eq('reviewer_id', user.id)
-        .maybeSingle()
-      setHasReview(!!data)
-    }
-    checkReview()
+    supabase
+      .from('reviews')
+      .select('id')
+      .eq('chat_room_id', id)
+      .eq('reviewer_id', user.id)
+      .maybeSingle()
+      .then(({ data }) => setHasReview(!!data))
   }, [user, room, id])
 
+  // 스크롤 아래로
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
+  // 실시간 구독
   useEffect(() => {
     const channel = supabase
       .channel(`room:${id}`)
       .on(
         'postgres_changes',
-        { event: 'INSERT', schema: 'public', table: 'messages', filter: `chat_room_id=eq.${id}` },
-        async (payload) => {
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'messages',
+          filter: `chat_room_id=eq.${id}`,
+        },
+        async payload => {
           const { data } = await supabase
             .from('messages')
             .select('*, profiles(name)')
             .eq('id', payload.new.id)
             .maybeSingle()
           if (data) setMessages(prev => [...prev, data as unknown as Message])
-        }
+        },
       )
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
   }, [id])
 
+  // 메시지 전송
   const handleSend = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!input.trim() || !user) return
     setSending(true)
+    const content = input.trim()
+    setInput('')
     await supabase.from('messages').insert({
       chat_room_id: id as string,
       sender_id: user.id,
-      content: input.trim(),
+      content,
     })
-    setInput('')
     setSending(false)
+    inputRef.current?.focus()
   }
 
+  // 면접 완료
   const handleCompleteInterview = async () => {
     if (!room) return
     setCompletingInterview(true)
@@ -141,19 +151,28 @@ export default function ChatRoomPage() {
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)]">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-100 rounded-t-2xl px-4 py-3 flex items-center gap-3 mb-0">
-        <Link href="/chat" className="text-gray-400 hover:text-gray-600 mr-1">←</Link>
+
+      {/* ── 헤더 ── */}
+      <div className="bg-white border-b border-gray-100 rounded-t-2xl px-4 py-3 flex items-center gap-3">
+        <Link href="/chat" className="text-gray-400 hover:text-gray-600 text-lg leading-none">
+          ←
+        </Link>
+
+        {/* 아바타 */}
         <div
-          className="w-8 h-8 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
+          className="w-9 h-9 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
           style={{ backgroundColor: 'var(--brand)' }}
         >
-          {otherName ? otherName[0] : '?'}
+          {otherName?.[0] ?? '?'}
         </div>
+
+        {/* 이름 + 공고 */}
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-900 text-sm">{otherName}</p>
+          <p className="font-semibold text-gray-900 text-sm leading-tight">{otherName}</p>
           <p className="text-xs text-gray-400 truncate">{room.job_posts?.title}</p>
         </div>
+
+        {/* 면접완료 버튼 / 뱃지 */}
         {room.interview_completed ? (
           <span className="text-xs font-semibold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-full flex-shrink-0">
             면접완료
@@ -169,13 +188,13 @@ export default function ChatRoomPage() {
         )}
       </div>
 
-      {/* Review prompt */}
+      {/* ── 후기 배너 ── */}
       {room.interview_completed && !hasReview && (
         <div
-          className="mx-0 px-4 py-3 flex items-center justify-between"
+          className="px-4 py-2.5 flex items-center justify-between"
           style={{ backgroundColor: 'var(--brand-light)' }}
         >
-          <p className="text-sm text-orange-700 font-medium">후기를 남겨주세요!</p>
+          <p className="text-sm text-orange-700 font-medium">⭐ 후기를 남겨주세요!</p>
           <Link
             href={`/reviews/new?room=${id}`}
             className="text-xs font-semibold text-white px-3 py-1.5 rounded-full"
@@ -186,19 +205,26 @@ export default function ChatRoomPage() {
         </div>
       )}
 
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto bg-gray-50 px-4 py-4 flex flex-col gap-3">
+      {/* ── 메시지 영역 ── */}
+      <div className="flex-1 overflow-y-auto bg-gray-50 px-4 py-4 flex flex-col gap-2">
         {messages.length === 0 && (
-          <p className="text-center text-sm text-gray-400 py-8">
-            첫 메시지를 보내보세요!
-          </p>
+          <div className="text-center text-sm text-gray-400 py-10">
+            <p className="text-3xl mb-2">👋</p>
+            <p>첫 메시지를 보내보세요!</p>
+          </div>
         )}
-        {messages.map(msg => {
+
+        {messages.map((msg, idx) => {
           const isMine = msg.sender_id === user?.id
+          const prevMsg = messages[idx - 1]
+          const showName =
+            !isMine &&
+            (!prevMsg || prevMsg.sender_id !== msg.sender_id)
+
           return (
             <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
-              <div className={`max-w-[75%] ${isMine ? 'items-end' : 'items-start'} flex flex-col gap-1`}>
-                {!isMine && (
+              <div className={`max-w-[75%] flex flex-col ${isMine ? 'items-end' : 'items-start'} gap-0.5`}>
+                {showName && (
                   <p className="text-xs text-gray-400 px-1">{msg.profiles?.name}</p>
                 )}
                 <div
@@ -212,7 +238,10 @@ export default function ChatRoomPage() {
                   {msg.content}
                 </div>
                 <p className="text-xs text-gray-300 px-1">
-                  {new Date(msg.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                  {new Date(msg.created_at).toLocaleTimeString('ko-KR', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  })}
                 </p>
               </div>
             </div>
@@ -221,12 +250,13 @@ export default function ChatRoomPage() {
         <div ref={bottomRef} />
       </div>
 
-      {/* Input */}
+      {/* ── 입력창 ── */}
       <form
         onSubmit={handleSend}
-        className="bg-white border-t border-gray-100 px-4 py-3 flex gap-2 items-end"
+        className="bg-white border-t border-gray-100 px-3 py-3 flex gap-2 items-end"
       >
         <input
+          ref={inputRef}
           type="text"
           value={input}
           onChange={e => setInput(e.target.value)}
@@ -239,7 +269,13 @@ export default function ChatRoomPage() {
           className="w-10 h-10 rounded-full flex items-center justify-center text-white flex-shrink-0 disabled:opacity-40 transition-all active:scale-95"
           style={{ backgroundColor: 'var(--brand)' }}
         >
-          ↑
+          {sending ? (
+            <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+              <path d="M8 12V4M4 8l4-4 4 4" stroke="white" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/>
+            </svg>
+          )}
         </button>
       </form>
     </div>
