@@ -45,10 +45,12 @@ export interface Database {
           employer_id: string
           title: string
           location: string
+          category: string
           salary: string
           work_hours: string
           description: string
           status: 'open' | 'closed'
+          deadline: string | null
           created_at: string
         }
         Insert: {
@@ -56,10 +58,12 @@ export interface Database {
           employer_id: string
           title: string
           location: string
+          category?: string
           salary?: string
           work_hours?: string
           description?: string
           status?: 'open' | 'closed'
+          deadline?: string | null
           created_at?: string
         }
         Update: {
@@ -67,10 +71,12 @@ export interface Database {
           employer_id?: string
           title?: string
           location?: string
+          category?: string
           salary?: string
           work_hours?: string
           description?: string
           status?: 'open' | 'closed'
+          deadline?: string | null
           created_at?: string
         }
         Relationships: []
