@@ -13,6 +13,7 @@ export interface Database {
         Row: {
           id: string
           role: 'employer' | 'seeker'
+          plan: 'free' | 'pro'
           name: string
           bio: string
           visa_type: string
@@ -22,6 +23,7 @@ export interface Database {
         Insert: {
           id: string
           role: 'employer' | 'seeker'
+          plan?: 'free' | 'pro'
           name?: string
           bio?: string
           visa_type?: string
@@ -31,6 +33,7 @@ export interface Database {
         Update: {
           id?: string
           role?: 'employer' | 'seeker'
+          plan?: 'free' | 'pro'
           name?: string
           bio?: string
           visa_type?: string
@@ -50,6 +53,8 @@ export interface Database {
           work_hours: string
           description: string
           status: 'open' | 'closed'
+          require_resume: boolean
+          custom_questions: Json
           deadline: string | null
           created_at: string
         }
@@ -63,6 +68,8 @@ export interface Database {
           work_hours?: string
           description?: string
           status?: 'open' | 'closed'
+          require_resume?: boolean
+          custom_questions?: Json
           deadline?: string | null
           created_at?: string
         }
@@ -76,6 +83,8 @@ export interface Database {
           work_hours?: string
           description?: string
           status?: 'open' | 'closed'
+          require_resume?: boolean
+          custom_questions?: Json
           deadline?: string | null
           created_at?: string
         }
@@ -87,6 +96,8 @@ export interface Database {
           job_post_id: string
           seeker_id: string
           status: 'pending' | 'accepted' | 'rejected'
+          resume_url: string | null
+          custom_answers: Json
           created_at: string
         }
         Insert: {
@@ -94,6 +105,8 @@ export interface Database {
           job_post_id: string
           seeker_id: string
           status?: 'pending' | 'accepted' | 'rejected'
+          resume_url?: string | null
+          custom_answers?: Json
           created_at?: string
         }
         Update: {
@@ -101,6 +114,62 @@ export interface Database {
           job_post_id?: string
           seeker_id?: string
           status?: 'pending' | 'accepted' | 'rejected'
+          resume_url?: string | null
+          custom_answers?: Json
+          created_at?: string
+        }
+        Relationships: []
+      }
+      resumes: {
+        Row: {
+          id: string
+          seeker_id: string
+          file_url: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          seeker_id: string
+          file_url: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          seeker_id?: string
+          file_url?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      interviews: {
+        Row: {
+          id: string
+          application_id: string
+          employer_id: string
+          seeker_id: string
+          proposed_dates: Json
+          confirmed_date: string | null
+          status: 'pending' | 'confirmed' | 'completed'
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          application_id: string
+          employer_id: string
+          seeker_id: string
+          proposed_dates?: Json
+          confirmed_date?: string | null
+          status?: 'pending' | 'confirmed' | 'completed'
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          application_id?: string
+          employer_id?: string
+          seeker_id?: string
+          proposed_dates?: Json
+          confirmed_date?: string | null
+          status?: 'pending' | 'confirmed' | 'completed'
           created_at?: string
         }
         Relationships: []
@@ -160,6 +229,7 @@ export interface Database {
         Row: {
           id: string
           chat_room_id: string
+          application_id: string | null
           reviewer_id: string
           reviewee_id: string
           rating: number
@@ -169,6 +239,7 @@ export interface Database {
         Insert: {
           id?: string
           chat_room_id: string
+          application_id?: string | null
           reviewer_id: string
           reviewee_id: string
           rating: number
@@ -178,6 +249,7 @@ export interface Database {
         Update: {
           id?: string
           chat_room_id?: string
+          application_id?: string | null
           reviewer_id?: string
           reviewee_id?: string
           rating?: number

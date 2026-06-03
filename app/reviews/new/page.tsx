@@ -7,7 +7,7 @@ import { useAuth } from '@/lib/auth-context'
 import { Suspense } from 'react'
 
 function NewReviewForm() {
-  const { user, profile } = useAuth()
+  const { user } = useAuth()
   const router = useRouter()
   const searchParams = useSearchParams()
   const roomId = searchParams.get('room')

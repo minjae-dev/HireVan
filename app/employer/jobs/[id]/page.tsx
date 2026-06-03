@@ -7,6 +7,12 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import type { Database } from '@/lib/database.types'
 
+type CustomAnswer = {
+  id: string
+  question: string
+  answer: string
+}
+
 type JobPost = Database['public']['Tables']['job_posts']['Row']
 type Application = Database['public']['Tables']['applications']['Row'] & {
   profiles: { name: string; bio: string; visa_type: string } | null
@@ -14,7 +20,7 @@ type Application = Database['public']['Tables']['applications']['Row'] & {
 
 export default function EmployerJobDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const { user, profile } = useAuth()
+  const { user } = useAuth()
   const router = useRouter()
 
   const [job, setJob] = useState<JobPost | null>(null)
@@ -231,6 +237,24 @@ export default function EmployerJobDetailPage() {
               )}
             </div>
 
+            {(job.require_resume || getQuestionCount(job.custom_questions) > 0) && (
+              <div className="mb-6 rounded-2xl bg-orange-50 px-4 py-3">
+                <p className="text-sm font-bold text-orange-700">지원 조건</p>
+                <div className="mt-2 flex flex-wrap gap-2">
+                  {job.require_resume && (
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-orange-600">
+                      이력서 필수
+                    </span>
+                  )}
+                  {getQuestionCount(job.custom_questions) > 0 && (
+                    <span className="rounded-full bg-white px-3 py-1 text-xs font-semibold text-orange-600">
+                      사전 질문 {getQuestionCount(job.custom_questions)}개
+                    </span>
+                  )}
+                </div>
+              </div>
+            )}
+
             {job.description && (
               <div className="mb-6 pb-6 border-b border-gray-100">
                 <h2 className="text-sm font-semibold text-gray-900 mb-3">상세 내용</h2>
@@ -377,6 +401,8 @@ export default function EmployerJobDetailPage() {
                   <p className="text-xs text-gray-600 line-clamp-2 mb-3 leading-relaxed">{app.profiles.bio}</p>
                 )}
 
+                <ApplicationSubmission app={app} requireResume={job.require_resume} />
+
                 {app.status === 'pending' && (
                   <div className="flex gap-2">
                     <button
@@ -416,6 +442,75 @@ export default function EmployerJobDetailPage() {
           </div>
         )}
       </div>
+    </div>
+  )
+}
+
+function getQuestionCount(value: Database['public']['Tables']['job_posts']['Row']['custom_questions']) {
+  if (!Array.isArray(value)) return 0
+  return value.filter(item => {
+    if (!item || typeof item !== 'object' || Array.isArray(item)) return false
+    return typeof item.question === 'string' && item.question.trim().length > 0
+  }).length
+}
+
+function parseCustomAnswers(value: Database['public']['Tables']['applications']['Row']['custom_answers']): CustomAnswer[] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map(item => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+      const id = typeof item.id === 'string' ? item.id : ''
+      const question = typeof item.question === 'string' ? item.question.trim() : ''
+      const answer = typeof item.answer === 'string' ? item.answer.trim() : ''
+      return question && answer ? { id, question, answer } : null
+    })
+    .filter((item): item is CustomAnswer => item !== null)
+}
+
+function ApplicationSubmission({
+  app,
+  requireResume,
+}: {
+  app: Application
+  requireResume: boolean
+}) {
+  const customAnswers = parseCustomAnswers(app.custom_answers)
+
+  if (!requireResume && customAnswers.length === 0) return null
+
+  return (
+    <div className="mb-4 rounded-2xl bg-gray-50 p-3">
+      <div className="mb-3 flex items-center justify-between gap-3">
+        <p className="text-xs font-bold text-gray-700">제출 자료</p>
+        {app.resume_url ? (
+          <a
+            href={app.resume_url}
+            target="_blank"
+            rel="noreferrer"
+            className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-orange-600 shadow-sm"
+          >
+            이력서 보기
+          </a>
+        ) : requireResume ? (
+          <span className="text-xs font-semibold text-red-500">이력서 없음</span>
+        ) : null}
+      </div>
+
+      {customAnswers.length > 0 ? (
+        <div className="space-y-2">
+          {customAnswers.map((answer, index) => (
+            <div key={`${answer.id}-${index}`} className="rounded-xl bg-white px-3 py-2">
+              <p className="text-xs font-semibold leading-relaxed text-gray-700">
+                {index + 1}. {answer.question}
+              </p>
+              <p className="mt-1 text-xs leading-relaxed text-gray-500">{answer.answer}</p>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <p className="rounded-xl bg-white px-3 py-2 text-xs text-gray-400">제출된 사전 질문 답변이 없습니다.</p>
+      )}
     </div>
   )
 }

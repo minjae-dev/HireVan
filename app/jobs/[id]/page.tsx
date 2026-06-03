@@ -7,6 +7,15 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import type { Database } from '@/lib/database.types'
 
+type CustomQuestion = {
+  id: string
+  question: string
+}
+
+type CustomAnswer = CustomQuestion & {
+  answer: string
+}
+
 type JobPost = Database['public']['Tables']['job_posts']['Row'] & {
   profiles: { name: string; bio: string } | null
 }
@@ -14,6 +23,8 @@ type JobPost = Database['public']['Tables']['job_posts']['Row'] & {
 type Application = Database['public']['Tables']['applications']['Row'] & {
   profiles: { name: string; bio: string; visa_type: string } | null
 }
+
+type Resume = Database['public']['Tables']['resumes']['Row']
 
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -25,6 +36,10 @@ export default function JobDetailPage() {
   const [applied, setApplied] = useState(false)
   const [applications, setApplications] = useState<Application[]>([])
   const [actionLoading, setActionLoading] = useState<string | null>(null)
+  const [resume, setResume] = useState<Resume | null>(null)
+  const [showApplyForm, setShowApplyForm] = useState(false)
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const [applyError, setApplyError] = useState('')
 
   useEffect(() => {
     const fetchJob = async () => {
@@ -52,6 +67,16 @@ export default function JobDetailPage() {
         setApplied(!!data)
       }
       checkApplied()
+
+      const fetchResume = async () => {
+        const { data } = await supabase
+          .from('resumes')
+          .select('*')
+          .eq('seeker_id', profile.id)
+          .maybeSingle()
+        setResume(data)
+      }
+      fetchResume()
     } else if (profile.role === 'employer' && job?.employer_id === profile.id) {
       const fetchApplications = async () => {
         const { data } = await supabase
@@ -70,12 +95,41 @@ export default function JobDetailPage() {
       router.push('/login')
       return
     }
+    if (!job) return
+
+    const customQuestions = parseCustomQuestions(job.custom_questions)
+
+    if (job.require_resume && !resume) {
+      setApplyError('지원하려면 이력서 등록이 필요합니다.')
+      return
+    }
+
+    if (customQuestions.length > 0 && !showApplyForm) {
+      setShowApplyForm(true)
+      setApplyError('')
+      return
+    }
+
+    const customAnswers: CustomAnswer[] = customQuestions.map(question => ({
+      ...question,
+      answer: (answers[question.id] ?? '').trim(),
+    }))
+
+    if (customAnswers.some(answer => !answer.answer)) {
+      setApplyError('사전 질문 답변을 모두 입력해주세요.')
+      return
+    }
+
     setApplying(true)
+    setApplyError('')
     const { error } = await supabase.from('applications').insert({
       job_post_id: id,
       seeker_id: user.id,
+      resume_url: job.require_resume ? resume?.file_url ?? null : resume?.file_url ?? null,
+      custom_answers: customAnswers,
     })
     if (!error) setApplied(true)
+    if (error) setApplyError('지원 처리에 실패했습니다. 잠시 후 다시 시도해주세요.')
     setApplying(false)
   }
 
@@ -143,6 +197,9 @@ export default function JobDetailPage() {
 
   const isOwner = profile?.id === job.employer_id
   const isSeeker = profile?.role === 'seeker'
+  const customQuestions = parseCustomQuestions(job.custom_questions)
+  const needsResume = job.require_resume
+  const cannotApplyBecauseResume = isSeeker && needsResume && !resume
 
   return (
     <div>
@@ -177,6 +234,32 @@ export default function JobDetailPage() {
           </div>
         )}
 
+        {(needsResume || customQuestions.length > 0) && (
+          <div className="border-t border-gray-100 pt-4 mt-4">
+            <h2 className="text-sm font-semibold text-gray-700 mb-3">지원 조건</h2>
+            <div className="flex flex-col gap-2">
+              {needsResume && (
+                <div className="rounded-xl bg-orange-50 px-4 py-3">
+                  <p className="text-sm font-semibold text-orange-700">이력서 첨부 필수</p>
+                  <p className="text-xs text-orange-600/80 mt-0.5">프로필에 등록된 이력서가 함께 제출됩니다.</p>
+                </div>
+              )}
+              {customQuestions.length > 0 && (
+                <div className="rounded-xl bg-gray-50 px-4 py-3">
+                  <p className="text-sm font-semibold text-gray-800">사전 질문 {customQuestions.length}개</p>
+                  <div className="mt-2 space-y-1">
+                    {customQuestions.map((question, index) => (
+                      <p key={question.id} className="text-xs text-gray-500">
+                        {index + 1}. {question.question}
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {job.profiles?.bio && (
           <div className="border-t border-gray-100 pt-4 mt-4">
             <h2 className="text-sm font-semibold text-gray-700 mb-2">업체 소개</h2>
@@ -191,14 +274,56 @@ export default function JobDetailPage() {
 
       {/* Seeker: Apply button */}
       {isSeeker && job.status === 'open' && (
-        <button
-          onClick={handleApply}
-          disabled={applied || applying}
-          className="w-full text-white font-semibold py-4 rounded-2xl transition-all active:scale-95 disabled:opacity-60 mb-4"
-          style={{ backgroundColor: applied ? '#9ca3af' : 'var(--brand)' }}
-        >
-          {applying ? '지원 중...' : applied ? '이미 지원했습니다' : '지원하기'}
-        </button>
+        <div className="mb-4">
+          {cannotApplyBecauseResume && (
+            <div className="mb-3 rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3">
+              <p className="text-sm font-semibold text-orange-700">지원하려면 이력서 등록이 필요합니다.</p>
+              <p className="text-xs text-orange-600/80 mt-1">프로필에서 이력서를 업로드한 뒤 다시 지원해주세요.</p>
+              <Link
+                href="/profile"
+                className="mt-3 inline-flex rounded-xl bg-white px-4 py-2 text-xs font-bold text-orange-600 shadow-sm"
+              >
+                프로필에서 등록하기
+              </Link>
+            </div>
+          )}
+
+          {showApplyForm && customQuestions.length > 0 && !applied && (
+            <div className="mb-3 rounded-2xl border border-gray-100 bg-white p-5">
+              <h2 className="text-base font-bold text-gray-900">사전 질문 답변</h2>
+              <p className="text-sm text-gray-500 mt-1 mb-4">업체가 확인할 수 있도록 모든 질문에 답변해주세요.</p>
+              <div className="space-y-4">
+                {customQuestions.map((question, index) => (
+                  <div key={question.id}>
+                    <label className="mb-1.5 block text-sm font-semibold text-gray-800">
+                      {index + 1}. {question.question}
+                    </label>
+                    <input
+                      type="text"
+                      value={answers[question.id] ?? ''}
+                      onChange={event => setAnswers(prev => ({ ...prev, [question.id]: event.target.value }))}
+                      placeholder="답변을 입력해주세요"
+                      className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-orange-300"
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {applyError && (
+            <p className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-500">{applyError}</p>
+          )}
+
+          <button
+            onClick={handleApply}
+            disabled={applied || applying || cannotApplyBecauseResume}
+            className="w-full text-white font-semibold py-4 rounded-2xl transition-all active:scale-95 disabled:opacity-60"
+            style={{ backgroundColor: applied || cannotApplyBecauseResume ? '#9ca3af' : 'var(--brand)' }}
+          >
+            {applying ? '지원 중...' : applied ? '이미 지원했습니다' : showApplyForm && customQuestions.length > 0 ? '답변 제출하고 지원하기' : '지원하기'}
+          </button>
+        </div>
       )}
 
       {/* Owner: Manage buttons */}
@@ -243,6 +368,7 @@ export default function JobDetailPage() {
                   {app.profiles?.bio && (
                     <p className="text-xs text-gray-500 line-clamp-2 mb-3 leading-relaxed">{app.profiles.bio}</p>
                   )}
+                  {renderApplicationDetails(app)}
                   {app.status === 'pending' && (
                     <div className="flex gap-2">
                       <button
@@ -274,6 +400,66 @@ export default function JobDetailPage() {
               ))}
             </div>
           )}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function parseCustomQuestions(value: Database['public']['Tables']['job_posts']['Row']['custom_questions']): CustomQuestion[] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map((item, index) => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+      const question = typeof item.question === 'string' ? item.question.trim() : ''
+      const id = typeof item.id === 'string' ? item.id : `q${index + 1}`
+      return question ? { id, question } : null
+    })
+    .filter((item): item is CustomQuestion => item !== null)
+    .slice(0, 3)
+}
+
+function parseCustomAnswers(value: Database['public']['Tables']['applications']['Row']['custom_answers']): CustomAnswer[] {
+  if (!Array.isArray(value)) return []
+
+  return value
+    .map(item => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+      const id = typeof item.id === 'string' ? item.id : ''
+      const question = typeof item.question === 'string' ? item.question.trim() : ''
+      const answer = typeof item.answer === 'string' ? item.answer.trim() : ''
+      return question && answer ? { id, question, answer } : null
+    })
+    .filter((item): item is CustomAnswer => item !== null)
+}
+
+function renderApplicationDetails(app: Application) {
+  const customAnswers = parseCustomAnswers(app.custom_answers)
+
+  if (!app.resume_url && customAnswers.length === 0) return null
+
+  return (
+    <div className="mb-3 space-y-3 rounded-xl bg-gray-50 p-3">
+      {app.resume_url && (
+        <a
+          href={app.resume_url}
+          target="_blank"
+          rel="noreferrer"
+          className="inline-flex rounded-xl bg-white px-3 py-2 text-xs font-bold text-orange-600 shadow-sm"
+        >
+          제출 이력서 보기
+        </a>
+      )}
+      {customAnswers.length > 0 && (
+        <div className="space-y-2">
+          <p className="text-xs font-bold text-gray-700">사전 질문 답변</p>
+          {customAnswers.map((answer, index) => (
+            <div key={`${answer.id}-${index}`} className="rounded-xl bg-white px-3 py-2">
+              <p className="text-xs font-semibold text-gray-700">{index + 1}. {answer.question}</p>
+              <p className="mt-1 text-xs leading-relaxed text-gray-500">{answer.answer}</p>
+            </div>
+          ))}
         </div>
       )}
     </div>

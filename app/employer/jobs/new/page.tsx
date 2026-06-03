@@ -8,6 +8,7 @@ import { supabase } from '@/lib/supabase'
 
 const LOCATION_OPTIONS = ['다운타운', '버나비', '서리', '코퀴틀람', '리치몬드', '노스밴쿠버', '기타']
 const JOB_TYPE_OPTIONS = ['카페', '식당', '네일숍', '편의점', '소매점', '청소용역', '배송', '기타']
+const MAX_QUESTIONS = 3
 
 export default function EmployerNewJobPage() {
   const router = useRouter()
@@ -26,6 +27,8 @@ export default function EmployerNewJobPage() {
 
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const [requireResume, setRequireResume] = useState(false)
+  const [questions, setQuestions] = useState<string[]>([])
 
   // 권한 확인
   if (!loading && (!user || profile?.role !== 'employer')) {
@@ -67,6 +70,14 @@ export default function EmployerNewJobPage() {
       return
     }
 
+    const customQuestions = questions
+      .map(question => question.trim())
+      .filter(Boolean)
+      .map((question, index) => ({
+        id: `q${index + 1}`,
+        question,
+      }))
+
     setSubmitting(true)
     setError('')
 
@@ -77,9 +88,13 @@ export default function EmployerNewJobPage() {
           employer_id: user.id,
           title: formData.title,
           location: formData.location,
+          category: formData.jobType,
           salary: formData.salary,
           work_hours: formData.workHours,
           description: formData.description,
+          deadline: formData.deadline || null,
+          require_resume: requireResume,
+          custom_questions: customQuestions,
           status: 'open',
         })
         .select()
@@ -93,10 +108,23 @@ export default function EmployerNewJobPage() {
 
       // 성공 후 목록 페이지로 이동
       router.push('/employer/jobs')
-    } catch (err) {
+    } catch {
       setError('오류가 발생했습니다. 다시 시도해주세요.')
       setSubmitting(false)
     }
+  }
+
+  const handleAddQuestion = () => {
+    if (questions.length >= MAX_QUESTIONS) return
+    setQuestions(prev => [...prev, ''])
+  }
+
+  const handleQuestionChange = (index: number, value: string) => {
+    setQuestions(prev => prev.map((question, i) => (i === index ? value : question)))
+  }
+
+  const handleRemoveQuestion = (index: number) => {
+    setQuestions(prev => prev.filter((_, i) => i !== index))
   }
 
   if (loading) {
@@ -250,6 +278,89 @@ export default function EmployerNewJobPage() {
             className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent transition-all resize-none"
           />
           <p className="text-xs text-gray-400 mt-1">상세할수록 좋은 지원자를 만날 수 있습니다</p>
+        </div>
+
+        <div className="mb-6 rounded-2xl border border-orange-100 bg-orange-50/50 p-4">
+          <div className="mb-4 flex items-start justify-between gap-3">
+            <div>
+              <div className="mb-1 flex items-center gap-2">
+                <h2 className="text-sm font-bold text-gray-900">지원자 필터링 조건 설정</h2>
+                <span className="rounded-full bg-orange-500 px-2 py-0.5 text-[11px] font-bold text-white">PRO</span>
+              </div>
+              <p className="text-xs leading-relaxed text-gray-500">
+                필요한 서류와 사전 질문을 받아 더 잘 맞는 지원자를 빠르게 확인하세요.
+              </p>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => setRequireResume(prev => !prev)}
+            className="mb-4 flex w-full items-center justify-between rounded-2xl border border-gray-100 bg-white px-4 py-3 text-left transition-all active:scale-[0.99]"
+            aria-pressed={requireResume}
+          >
+            <div>
+              <p className="text-sm font-semibold text-gray-900">이력서 첨부 필수</p>
+              <p className="mt-0.5 text-xs text-gray-400">지원자가 프로필에 등록한 이력서를 함께 제출합니다.</p>
+            </div>
+            <span
+              className={`relative h-7 w-12 rounded-full transition-colors ${
+                requireResume ? 'bg-orange-500' : 'bg-gray-200'
+              }`}
+            >
+              <span
+                className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                  requireResume ? 'translate-x-6' : 'translate-x-1'
+                }`}
+              />
+            </span>
+          </button>
+
+          <div className="rounded-2xl border border-gray-100 bg-white p-4">
+            <div className="mb-3 flex items-center justify-between gap-3">
+              <div>
+                <p className="text-sm font-semibold text-gray-900">지원자에게 사전 질문하기</p>
+                <p className="mt-0.5 text-xs text-gray-400">최대 {MAX_QUESTIONS}개까지 단답형 질문을 추가할 수 있습니다.</p>
+              </div>
+              <button
+                type="button"
+                onClick={handleAddQuestion}
+                disabled={questions.length >= MAX_QUESTIONS}
+                className="flex-shrink-0 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-bold text-orange-600 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
+              >
+                + 추가
+              </button>
+            </div>
+
+            {questions.length === 0 ? (
+              <p className="rounded-xl bg-gray-50 px-4 py-3 text-xs text-gray-400">
+                아직 추가된 질문이 없습니다.
+              </p>
+            ) : (
+              <div className="space-y-2">
+                {questions.map((question, index) => (
+                  <div key={index} className="flex gap-2">
+                    <input
+                      type="text"
+                      value={question}
+                      onChange={event => handleQuestionChange(index, event.target.value)}
+                      maxLength={120}
+                      placeholder={`질문 ${index + 1}. 예: 가능한 근무 시작일은 언제인가요?`}
+                      className="min-w-0 flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-orange-300"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveQuestion(index)}
+                      className="h-[46px] w-[46px] flex-shrink-0 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-400 transition-colors hover:text-red-500"
+                      aria-label={`질문 ${index + 1} 삭제`}
+                    >
+                      ×
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* 에러 메시지 */}
