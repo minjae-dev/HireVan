@@ -124,27 +124,49 @@ export default function EmployerJobDetailPage() {
     if (!user || !job) return
     setActionLoading(appId)
 
-    await supabase.from('applications').update({ status }).eq('id', appId)
+    try {
+      await supabase.from('applications').update({ status }).eq('id', appId)
 
-    if (status === 'accepted') {
-      const existing = await supabase
-        .from('chat_rooms')
-        .select('id')
-        .eq('job_post_id', job.id)
-        .eq('seeker_id', seekerId)
-        .maybeSingle()
+      if (status === 'accepted') {
+        const { data: existing } = await supabase
+          .from('chat_rooms')
+          .select('id')
+          .eq('job_post_id', job.id)
+          .eq('seeker_id', seekerId)
+          .maybeSingle()
 
-      if (!existing.data) {
-        await supabase.from('chat_rooms').insert({
-          job_post_id: job.id,
-          employer_id: user.id,
-          seeker_id: seekerId,
-        })
+        let chatRoomId: string
+
+        if (existing?.id) {
+          chatRoomId = existing.id
+        } else {
+          const { data: newRoom, error: insertError } = await supabase
+            .from('chat_rooms')
+            .insert({
+              job_post_id: job.id,
+              employer_id: user.id,
+              seeker_id: seekerId,
+            })
+            .select('id')
+            .single()
+
+          if (insertError) throw insertError
+          chatRoomId = newRoom.id
+        }
+
+        setApplications(prev => prev.map(a => (a.id === appId ? { ...a, status } : a)))
+        setActionLoading(null)
+
+        // 채팅방으로 이동
+        router.push(`/chat/${chatRoomId}`)
+      } else {
+        setApplications(prev => prev.map(a => (a.id === appId ? { ...a, status } : a)))
+        setActionLoading(null)
       }
+    } catch (err) {
+      console.error('Error:', err)
+      setActionLoading(null)
     }
-
-    setApplications(prev => prev.map(a => (a.id === appId ? { ...a, status } : a)))
-    setActionLoading(null)
   }
 
   if (loading) {

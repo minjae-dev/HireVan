@@ -16,6 +16,7 @@ type ChatRoomRow = {
   job_posts: { title: string } | null
   employer: { name: string } | null
   seeker: { name: string } | null
+  messages?: Array<{ content: string; created_at: string }> | null
 }
 
 export default function ChatListPage() {
@@ -37,14 +38,63 @@ export default function ChatListPage() {
           *,
           job_posts(title),
           employer:profiles!chat_rooms_employer_id_fkey(name),
-          seeker:profiles!chat_rooms_seeker_id_fkey(name)
+          seeker:profiles!chat_rooms_seeker_id_fkey(name),
+          messages(content, created_at)
         `)
         .or(`employer_id.eq.${user.id},seeker_id.eq.${user.id}`)
         .order('created_at', { ascending: false })
-      setRooms((data as unknown as ChatRoomRow[]) ?? [])
+
+      const roomsWithMessages = ((data ?? []) as unknown as ChatRoomRow[]).map(room => ({
+        ...room,
+        messages: (room.messages as Array<{ content: string; created_at: string }> | null)
+          ?.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+          ?.slice(0, 1) ?? null,
+      }))
+
+      setRooms(roomsWithMessages)
       setFetching(false)
     }
     fetchRooms()
+  }, [user])
+
+  // Realtime 구독: 새 채팅방 추가 시
+  useEffect(() => {
+    if (!user) return
+
+    const channel = supabase
+      .channel('chat_rooms:all')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_rooms',
+          filter: `or(employer_id.eq.${user.id},seeker_id.eq.${user.id})`,
+        },
+        async payload => {
+          const newRoom = payload.new as ChatRoomRow
+          // 새 채팅방 정보 조회
+          const { data } = await supabase
+            .from('chat_rooms')
+            .select(`
+              *,
+              job_posts(title),
+              employer:profiles!chat_rooms_employer_id_fkey(name),
+              seeker:profiles!chat_rooms_seeker_id_fkey(name)
+            `)
+            .eq('id', newRoom.id)
+            .single()
+
+          if (data) {
+            setRooms(prev => [data as unknown as ChatRoomRow, ...prev])
+          }
+        },
+      )
+      .subscribe()
+
+    return () => {
+      supabase.removeChannel(channel)
+    }
   }, [user])
 
   if (loading || fetching) {
@@ -74,20 +124,24 @@ export default function ChatListPage() {
           {rooms.map(room => {
             const isEmployer = room.employer_id === user?.id
             const otherName = isEmployer ? room.seeker?.name : room.employer?.name
+            const lastMessage = room.messages?.[0]?.content
+
             return (
               <Link key={room.id} href={`/chat/${room.id}`}>
                 <div className="bg-white rounded-2xl border border-gray-100 p-5 hover:border-orange-200 transition-all active:scale-[0.99]">
                   <div className="flex items-center justify-between gap-3">
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-3 flex-1 min-w-0">
                       <div
                         className="w-10 h-10 rounded-full flex items-center justify-center text-sm font-bold text-white flex-shrink-0"
                         style={{ backgroundColor: 'var(--brand)' }}
                       >
                         {otherName ? otherName[0] : '?'}
                       </div>
-                      <div>
+                      <div className="flex-1 min-w-0">
                         <p className="font-semibold text-gray-900 text-sm">{otherName ?? '상대방'}</p>
-                        <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">{room.job_posts?.title}</p>
+                        <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">
+                          {lastMessage ? lastMessage : room.job_posts?.title}
+                        </p>
                       </div>
                     </div>
                     <div className="text-right flex-shrink-0">
