@@ -1,9 +1,20 @@
-import { createClient } from '@supabase/supabase-js'
-
+import { createClient } from '@supabase/supabase-js';
+import ws from 'ws'; // 1. 이거 상단에 추가
+globalThis.WebSocket = ws;
 const supabaseUrl = 'https://btqowlpcspsxbyrjyeot.supabase.co'
 const supabaseKey = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImJ0cW93bHBjc3BzeGJ5cmp5ZW90Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODA0MzE4NTksImV4cCI6MjA5NjAwNzg1OX0.rBPB2jdhe4OcWHRqKdmwv7WqAPyE2PoL7DcJAy_3EIE'
 
-const supabase = createClient(supabaseUrl, supabaseKey)
+// transport 옵션을 넣어줍니다. 
+const supabase = createClient(supabaseUrl, supabaseKey, {
+  auth: { persistSession: false },
+  global: {
+    fetch: (...args) => fetch(...args),
+  },
+  // 2. 여기에 실시간용 웹소켓 모듈을 직접 주입합니다.
+  realtime: {
+    transport: ws,
+  },
+})
 
 async function fullTest() {
   console.log('\n' + '='.repeat(55))

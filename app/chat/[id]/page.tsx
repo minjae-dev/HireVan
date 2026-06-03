@@ -1,11 +1,10 @@
 'use client'
-
-import { useState, useEffect, useRef, useCallback } from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import type { Database } from '@/lib/database.types'
+import { supabase } from '@/lib/supabase'
+import Link from 'next/link'
+import { useParams, useRouter } from 'next/navigation'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 type Message = Database['public']['Tables']['messages']['Row'] & {
   profiles: { name: string } | null

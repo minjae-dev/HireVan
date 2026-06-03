@@ -22,7 +22,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="ko">
-      <body className={`${notoSansKr.variable} font-sans bg-gray-50 min-h-screen`}>
+    {/* 🌟 html 태그와 body 태그 모두에 suppressHydrationWarning을 넣어주는 것이 가장 안전합니다 */}
+    <body 
+      className={`${notoSansKr.variable} font-sans bg-gray-50 min-h-screen`}
+      suppressHydrationWarning
+    >
         <AuthProvider>
           <Navbar />
           <main className="max-w-2xl mx-auto px-4 pb-16 pt-4">
