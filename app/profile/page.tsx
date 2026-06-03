@@ -150,7 +150,7 @@ export default function ProfilePage() {
         <div className="bg-white rounded-2xl border border-gray-100 p-5">
           <h2 className="font-semibold text-gray-800 mb-3">내 구인글 관리</h2>
           <a
-            href="/jobs/my"
+            href="/employer/jobs"
             className="flex items-center justify-between text-sm text-gray-600 hover:text-orange-500 transition-colors"
           >
             <span>등록한 구인글 보기</span>
