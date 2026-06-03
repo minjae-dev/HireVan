@@ -47,9 +47,20 @@ export default function ChatRoomPage() {
       `)
       .eq('id', id)
       .maybeSingle()
-    if (!data) { router.push('/chat'); return }
+
+    if (!data) {
+      router.push('/chat')
+      return
+    }
+
+    // 권한 검증: 채팅방의 업체 또는 구직자만 접근 가능
+    if (user && data.employer_id !== user.id && data.seeker_id !== user.id) {
+      router.push('/chat')
+      return
+    }
+
     setRoom(data as unknown as ChatRoom)
-  }, [id, router])
+  }, [id, router, user])
 
   // 메시지 로드
   const fetchMessages = useCallback(async () => {
