@@ -119,16 +119,25 @@ export default function ProfilePage() {
 
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
     const filePath = `${user.id}/${Date.now()}-${safeName}`
-    const { error: uploadError } = await supabase.storage
+    
+    console.log('Uploading resume to:', filePath)
+    
+    const { data: uploadData, error: uploadError } = await supabase.storage
       .from('resumes')
-      .upload(filePath, file, { upsert: true })
+      .upload(filePath, file, { 
+        upsert: true,
+        cacheControl: '3600',
+      })
 
     if (uploadError) {
-      setResumeError('이력서 업로드에 실패했습니다. 스토리지 버킷 설정을 확인해주세요.')
+      console.error('Storage upload error:', uploadError)
+      setResumeError(`이력서 업로드 실패: ${uploadError.message}`)
       setResumeUploading(false)
       event.target.value = ''
       return
     }
+    
+    console.log('Upload successful:', uploadData)
 
     const { data: publicUrlData } = supabase.storage.from('resumes').getPublicUrl(filePath)
     const updatedAt = new Date().toISOString()

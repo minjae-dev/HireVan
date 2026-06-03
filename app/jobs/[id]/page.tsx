@@ -40,6 +40,9 @@ export default function JobDetailPage() {
   const [showApplyForm, setShowApplyForm] = useState(false)
   const [answers, setAnswers] = useState<Record<string, string>>({})
   const [applyError, setApplyError] = useState('')
+  const [canApply, setCanApply] = useState(false)
+  const [uploadingResume, setUploadingResume] = useState(false)
+  const [newResumeUrl, setNewResumeUrl] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchJob = async () => {
@@ -97,40 +100,104 @@ export default function JobDetailPage() {
     }
     if (!job) return
 
-    const customQuestions = parseCustomQuestions(job.custom_questions)
-
-    if (job.require_resume && !resume) {
-      setApplyError('지원하려면 이력서 등록이 필요합니다.')
+    // 이미 지원했는지 다시 확인
+    const { data: existingApp } = await supabase
+      .from('applications')
+      .select('id')
+      .eq('job_post_id', id)
+      .eq('seeker_id', profile.id)
+      .maybeSingle()
+    
+    if (existingApp) {
+      setApplyError('이미 지원한 구인글입니다.')
+      setApplied(true)
       return
     }
 
+    const customQuestions = parseCustomQuestions(job.custom_questions)
+
+    // ★ [이력서 필수 구인글] 이력서가 없으면 무조건 차단
+    const needsResume = job.require_resume === true
+    if (needsResume && !resume) {
+      setApplyError('이 구인글은 이력서 등록이 필수입니다. 프로필에서 이력서를 업로드해주세요.')
+      setTimeout(() => {
+        router.push('/profile')
+      }, 2000)
+      return
+    }
+
+    // 커스텀 질문이 있으면 폼 표시
     if (customQuestions.length > 0 && !showApplyForm) {
       setShowApplyForm(true)
       setApplyError('')
       return
     }
 
+    // 커스텀 질문 답변 검증 (대충 구현 금지 - 빈 공백도 차단)
     const customAnswers: CustomAnswer[] = customQuestions.map(question => ({
       ...question,
       answer: (answers[question.id] ?? '').trim(),
     }))
 
-    if (customAnswers.some(answer => !answer.answer)) {
-      setApplyError('사전 질문 답변을 모두 입력해주세요.')
+    // 단 하나의 답변이라도 공백이면 차단
+    const emptyAnswers = customAnswers.filter(answer => !answer.answer)
+    if (emptyAnswers.length > 0) {
+      setApplyError(`모든 질문에 답해야 지원할 수 있습니다. (${emptyAnswers.length}개 미답변)`)
+      return
+    }
+
+    // ★ 최종 검증: 이력서 필수 조건 다시 한번 확인
+    if (needsResume && !resume) {
+      setApplyError('이력서가 확인되지 않았습니다. 프로필에서 이력서를 등록해주세요.')
       return
     }
 
     setApplying(true)
     setApplyError('')
-    const { error } = await supabase.from('applications').insert({
+    
+    // applications 테이블에 데이터 삽입
+    const applicationData: {
+      job_post_id: string
+      seeker_id: string
+      status: 'pending'
+      resume_url?: string | null
+      custom_answers?: CustomAnswer[]
+    } = {
       job_post_id: id,
-      seeker_id: user.id,
-      resume_url: job.require_resume ? resume?.file_url ?? null : resume?.file_url ?? null,
-      custom_answers: customAnswers,
-    })
-    if (!error) setApplied(true)
-    if (error) setApplyError('지원 처리에 실패했습니다. 잠시 후 다시 시도해주세요.')
+      seeker_id: profile.id,
+      status: 'pending' as const,
+    }
+    
+    if (resume?.file_url) {
+      applicationData.resume_url = resume.file_url
+    }
+    if (customAnswers.length > 0) {
+      applicationData.custom_answers = customAnswers
+    }
+
+    console.log('Submitting application:', applicationData)
+
+    const { error } = await supabase.from('applications').insert(applicationData)
+    
+    if (error) {
+      console.error('Application error:', error)
+      // 중복 키 에러인지 확인
+      if (error.code === '23505') {
+        setApplyError('이미 지원한 구인글입니다.')
+        setApplied(true)
+      } else {
+        setApplyError(`지원 처리에 실패했습니다: ${error.message}`)
+      }
+      setApplying(false)
+      return
+    }
+
+    // 성공 시 applied 상태 업데이트
+    setApplied(true)
     setApplying(false)
+    
+    // 성공 메시지 표시 후 버튼 텍스트 변경
+    setApplyError('')
   }
 
   const handleApplicationStatus = async (appId: string, status: 'accepted' | 'rejected', seekerId: string) => {
@@ -197,8 +264,27 @@ export default function JobDetailPage() {
 
   const isOwner = profile?.id === job.employer_id
   const isSeeker = profile?.role === 'seeker'
-  const customQuestions = parseCustomQuestions(job.custom_questions)
-  const needsResume = job.require_resume
+  
+  // DB에 require_resume/custom_questions 컬럼이 없을 수 있으므로,
+  // description에서 메타데이터를 파싱하여 지원 조건을 판단
+  const parseDescriptionMetadata = (desc: string) => {
+    const hasRequireResume = desc.includes('[이력서필수]')
+    const questionsMatch = desc.match(/\[사전질문\]\s*(.+)/)
+    const questions = questionsMatch ? questionsMatch[1].split(',').map((q, i) => ({
+      id: `q${i + 1}`,
+      question: q.trim(),
+    })).filter(q => q.question) : []
+    
+    return { hasRequireResume, questions }
+  }
+  
+  const metadata = job.description ? parseDescriptionMetadata(job.description) : { hasRequireResume: false, questions: [] }
+  
+  // DB 컬럼이 있으면 우선, 없으면 메타데이터 사용
+  const customQuestionsFromDB = parseCustomQuestions(job.custom_questions)
+  const customQuestions = customQuestionsFromDB.length > 0 ? customQuestionsFromDB : metadata.questions
+  const needsResume = job.require_resume === true || metadata.hasRequireResume
+  
   const cannotApplyBecauseResume = isSeeker && needsResume && !resume
 
   return (
