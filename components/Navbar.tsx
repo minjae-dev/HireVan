@@ -25,24 +25,43 @@ export default function Navbar() {
           <div className="w-16 h-8 bg-gray-100 rounded animate-pulse" />
         ) : user && profile ? (
           <div className="flex items-center gap-4">
-            <Link
-              href="/jobs"
-              className={`text-sm font-medium ${pathname.startsWith('/jobs') ? 'text-orange-500' : 'text-gray-600'}`}
-            >
-              구인글
-            </Link>
-            <Link
-              href="/chat"
-              className={`text-sm font-medium ${pathname.startsWith('/chat') ? 'text-orange-500' : 'text-gray-600'}`}
-            >
-              채팅
-            </Link>
-            <Link
-              href="/reviews"
-              className={`text-sm font-medium ${pathname.startsWith('/reviews') ? 'text-orange-500' : 'text-gray-600'}`}
-            >
-              후기
-            </Link>
+            {profile.role === 'employer' ? (
+              <>
+                <Link
+                  href="/employer/jobs"
+                  className={`text-sm font-medium ${pathname.startsWith('/employer/jobs') ? 'text-orange-500' : 'text-gray-600'}`}
+                >
+                  내 구인글
+                </Link>
+                <Link
+                  href="/chat"
+                  className={`text-sm font-medium ${pathname.startsWith('/chat') ? 'text-orange-500' : 'text-gray-600'}`}
+                >
+                  채팅
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link
+                  href="/jobs"
+                  className={`text-sm font-medium ${pathname.startsWith('/jobs') && !pathname.startsWith('/employer') ? 'text-orange-500' : 'text-gray-600'}`}
+                >
+                  구인글
+                </Link>
+                <Link
+                  href="/chat"
+                  className={`text-sm font-medium ${pathname.startsWith('/chat') ? 'text-orange-500' : 'text-gray-600'}`}
+                >
+                  채팅
+                </Link>
+                <Link
+                  href="/reviews"
+                  className={`text-sm font-medium ${pathname.startsWith('/reviews') ? 'text-orange-500' : 'text-gray-600'}`}
+                >
+                  후기
+                </Link>
+              </>
+            )}
             <Link
               href="/profile"
               className={`text-sm font-medium ${pathname === '/profile' ? 'text-orange-500' : 'text-gray-600'}`}
