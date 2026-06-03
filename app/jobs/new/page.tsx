@@ -17,6 +17,11 @@ const LOCATION_OPTIONS = [
 
 const CATEGORY_OPTIONS = ['카페', '식당', '네일숍', '편의점', '기타']
 
+type CustomQuestion = {
+  id: string
+  question: string
+}
+
 export default function NewJobPage() {
   const { user, profile } = useAuth()
   const router = useRouter()
@@ -30,6 +35,11 @@ export default function NewJobPage() {
   const [deadline, setDeadline] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  
+  // Phase 2: Resume requirement and custom questions
+  const [requireResume, setRequireResume] = useState(false)
+  const [customQuestions, setCustomQuestions] = useState<CustomQuestion[]>([])
+  const [newQuestion, setNewQuestion] = useState('')
 
   if (!profile || profile.role !== 'employer') {
     return (
@@ -58,6 +68,8 @@ export default function NewJobPage() {
         description,
         deadline: deadline || null,
         status: 'open',
+        require_resume: requireResume,
+        custom_questions: customQuestions,
       })
       .select()
       .single()
@@ -186,6 +198,96 @@ export default function NewJobPage() {
             </p>
           </Field>
 
+          {/* Phase 2: Resume Requirement Toggle */}
+          <Field label="이력서 필수 여부">
+            <button
+              type="button"
+              onClick={() => setRequireResume(!requireResume)}
+              className={`relative inline-flex h-7 w-12 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none focus:ring-2 focus:ring-orange-300 ${
+                requireResume ? 'bg-orange-500' : 'bg-gray-200'
+              }`}
+            >
+              <span
+                className={`inline-block h-6 w-6 transform rounded-full bg-white shadow transition duration-200 ease-in-out ${
+                  requireResume ? 'translate-x-5' : 'translate-x-0'
+                }`}
+              />
+            </button>
+            <p className="text-xs text-gray-400 mt-1">
+              {requireResume 
+                ? '지원자는 이력서가 등록되어 있어야 지원할 수 있습니다.'
+                : '이력서 없이도 지원할 수 있습니다.'
+              }
+            </p>
+          </Field>
+
+          {/* Phase 2: Custom Questions */}
+          <Field label="사전 질문 (최대 3개)">
+            <div className="space-y-2">
+              {customQuestions.map((q, index) => (
+                <div key={q.id} className="flex items-center gap-2">
+                  <span className="flex-1 text-sm text-gray-700 bg-gray-50 rounded-xl px-4 py-3 border border-gray-100">
+                    {index + 1}. {q.question}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => setCustomQuestions(prev => prev.filter(item => item.id !== q.id))}
+                    className="p-2 text-red-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+                    aria-label="삭제"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              ))}
+              
+              {customQuestions.length < 3 && (
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={newQuestion}
+                    onChange={e => setNewQuestion(e.target.value)}
+                    placeholder="예: 한국어 가능한가요?"
+                    className={inputClass + ' flex-1'}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        if (newQuestion.trim()) {
+                          setCustomQuestions(prev => [
+                            ...prev,
+                            { id: `q${Date.now()}`, question: newQuestion.trim() }
+                          ])
+                          setNewQuestion('')
+                        }
+                      }
+                    }}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (newQuestion.trim()) {
+                        setCustomQuestions(prev => [
+                          ...prev,
+                          { id: `q${Date.now()}`, question: newQuestion.trim() }
+                        ])
+                        setNewQuestion('')
+                      }
+                    }}
+                    disabled={!newQuestion.trim()}
+                    className="px-4 py-2 rounded-xl text-sm font-medium text-white transition-all active:scale-95 disabled:opacity-40"
+                    style={{ backgroundColor: 'var(--brand)' }}
+                  >
+                    추가
+                  </button>
+                </div>
+              )}
+              <p className="text-xs text-gray-400">
+                지원자가 지원 시 답변해야 할 질문을 추가하세요.
+              </p>
+            </div>
+          </Field>
+
           {/* 상세 내용 */}
           <Field label="상세 내용">
             <textarea
@@ -214,6 +316,10 @@ export default function NewJobPage() {
                     icon="📅"
                     text={`~${new Date(deadline).toLocaleDateString('ko-KR')}`}
                   />
+                )}
+                {requireResume && <PreviewTag icon="📄" text="이력서 필수" />}
+                {customQuestions.length > 0 && (
+                  <PreviewTag icon="❓" text={`사전질문 ${customQuestions.length}개`} />
                 )}
               </div>
             </div>
