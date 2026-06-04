@@ -16,6 +16,7 @@ type CustomAnswer = {
 type JobPost = Database['public']['Tables']['job_posts']['Row']
 type Application = Database['public']['Tables']['applications']['Row'] & {
   profiles: { name: string; bio: string; visa_type: string; no_show_count: number } | null
+  chat_room_id: string | null
 }
 
 export default function EmployerJobDetailPage() {
@@ -63,7 +64,23 @@ export default function EmployerJobDetailPage() {
         .eq('job_post_id', id)
         .order('created_at', { ascending: false })
 
-      setApplications((appData as unknown as Application[]) ?? [])
+      // 해당 공고의 채팅방 조회 (seeker_id → chat_room_id 매핑용)
+      const { data: chatRoomsData } = await supabase
+        .from('chat_rooms')
+        .select('id, seeker_id')
+        .eq('job_post_id', id)
+
+      const chatRoomMap = new Map<string, string>()
+      for (const room of chatRoomsData ?? []) {
+        chatRoomMap.set(room.seeker_id, room.id)
+      }
+
+      const applicationsWithRoom = ((appData ?? []) as unknown as Omit<Application, 'chat_room_id'>[]).map(app => ({
+        ...app,
+        chat_room_id: chatRoomMap.get(app.seeker_id) ?? null,
+      }))
+
+      setApplications(applicationsWithRoom)
 
       if (jobData) {
         setEditForm({
@@ -424,12 +441,22 @@ export default function EmployerJobDetailPage() {
                 )}
 
                 {app.status === 'accepted' && (
-                  <Link
-                    href="/chat"
-                    className="block text-center py-2 rounded-lg text-xs font-semibold text-orange-600 border border-orange-200 bg-orange-50"
-                  >
-                    채팅방 보기
-                  </Link>
+                  app.chat_room_id ? (
+                    <Link
+                      href={`/chat/${app.chat_room_id}`}
+                      className="block text-center py-2 rounded-lg text-xs font-semibold text-white transition-all active:scale-95"
+                      style={{ backgroundColor: 'var(--brand)' }}
+                    >
+                      💬 채팅 바로가기
+                    </Link>
+                  ) : (
+                    <Link
+                      href="/chat"
+                      className="block text-center py-2 rounded-lg text-xs font-semibold text-orange-600 border border-orange-200 bg-orange-50"
+                    >
+                      채팅방 보기
+                    </Link>
+                  )
                 )}
 
                 {app.status === 'rejected' && (

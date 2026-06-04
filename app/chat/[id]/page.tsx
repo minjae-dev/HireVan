@@ -378,8 +378,14 @@ export default function ChatRoomPage() {
 
         {/* 이름 + 공고 */}
         <div className="flex-1 min-w-0">
-          <p className="font-semibold text-gray-900 text-sm leading-tight">{otherName}</p>
-          <p className="text-xs text-gray-400 truncate">{room.job_posts?.title}</p>
+          <p className="font-semibold text-gray-900 text-sm leading-tight truncate">{otherName}</p>
+          <Link
+            href={isEmployer ? `/employer/jobs/${room.job_post_id}` : `/jobs/${room.job_post_id}`}
+            className="mt-0.5 inline-flex items-center gap-1 max-w-full text-xs font-medium text-orange-600 hover:text-orange-700 hover:underline"
+          >
+            <span className="flex-shrink-0">📋</span>
+            <span className="truncate">{room.job_posts?.title}</span>
+          </Link>
         </div>
 
         {/* 면접완료 버튼 / 뱃지 */}

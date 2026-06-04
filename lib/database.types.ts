@@ -6,6 +6,131 @@ export type Json =
   | { [key: string]: Json | undefined }
   | Json[]
 
+/**
+ * 비자 상태 (Postgres enum `visa_status_enum`).
+ * DB → 클라이언트는 `string`으로 직렬화되지만 코드 안정성을 위해 union으로 표현.
+ */
+export type VisaStatus =
+  | 'working_holiday'
+  | 'co_op'
+  | 'student'
+  | 'post_grad_work'
+  | 'permanent_resident'
+  | 'citizen'
+  | 'other'
+
+/**
+ * 구직자 자가 진단 영어 레벨.
+ */
+export type EnglishLevel = 'beginner' | 'intermediate' | 'advanced' | 'native'
+
+/**
+ * 가용 시간 (availability) JSON shape.
+ * 예: { monday: ['morning', 'evening'], sunday: ['night'] }
+ */
+export type AvailabilityMatrix = Partial<{
+  monday: ShiftSlot[]
+  tuesday: ShiftSlot[]
+  wednesday: ShiftSlot[]
+  thursday: ShiftSlot[]
+  friday: ShiftSlot[]
+  saturday: ShiftSlot[]
+  sunday: ShiftSlot[]
+}>
+
+export type ShiftSlot = 'morning' | 'afternoon' | 'evening' | 'night'
+export type Weekday = keyof AvailabilityMatrix
+
+/**
+ * employer 대시보드에서 사용하는 billing 상태 객체 (RPC `get_employer_billing_status` 반환값).
+ */
+export interface EmployerBillingStatus {
+  ok: boolean
+  reason?: 'unauthenticated' | 'not_employer'
+  plan?: 'free' | 'pro'
+  pro_subscriber?: boolean
+  credit_count?: number
+  subscription_ends_at?: string | null
+  grace_period_active?: boolean
+  grace_period_ends_at?: string | null
+  last_payment_failed_at?: string | null
+  has_stripe_customer?: boolean
+}
+
+/**
+ * `view_seeker_profile` RPC의 반환값.
+ * 성공 시 reason ∈ 'pro' | 'granted' | 'already_viewed', 실패 시 'no_credit' | 'unauthenticated' | ...
+ */
+export interface ViewSeekerProfileResult {
+  ok: boolean
+  reason:
+    | 'pro'
+    | 'granted'
+    | 'already_viewed'
+    | 'no_credit'
+    | 'unauthenticated'
+    | 'seeker_not_found'
+    | 'not_a_seeker'
+  profile?: PublicProfile
+  credits_remaining: number
+}
+
+/**
+ * `profiles_public` 뷰 / `view_seeker_profile` RPC 안의 `profile` 필드.
+ * premium 필드는 viewer 권한에 따라 NULL일 수 있음.
+ */
+export interface PublicProfile {
+  id: string
+  role: 'employer' | 'seeker'
+  name: string
+  avatar_url: string | null
+  bio: string | null
+  no_show_count: number
+  created_at: string
+  visa_status: VisaStatus | string | null
+  visa_type: string | null
+  visa_expiry: string | null
+  availability: AvailabilityMatrix | null
+  neighborhood: string | null
+  has_sir: boolean | null
+  has_foodsafe: boolean | null
+  english_level: EnglishLevel | null
+}
+
+/**
+ * 매칭 결과 (RPC `match_seekers_to_job`).
+ */
+export interface SeekerMatch {
+  seeker_id: string
+  name: string
+  match_score: number
+  matched_days: string[]
+  matched_certs: string[]
+  reason: string
+}
+
+/**
+ * 알림 (notifications 테이블 + Realtime 페이로드).
+ */
+export interface AppNotification {
+  id: string
+  user_id: string
+  type:
+    | 'seeker_match'
+    | 'payment_failed'
+    | 'subscription_canceled'
+    | 'subscription_recovered'
+    | 'grace_period_started'
+    | 'grace_period_ended'
+    | 'welcome_credit'
+  title: string
+  body: string | null
+  link: string | null
+  metadata: Json
+  read_at: string | null
+  created_at: string
+}
+
 export interface Database {
   public: {
     Tables: {
@@ -19,6 +144,26 @@ export interface Database {
           visa_type: string
           avatar_url: string
           no_show_count: number
+          // Stripe / billing
+          stripe_customer_id: string | null
+          stripe_subscription_id: string | null
+          // Credits & PRO
+          credit_count: number
+          pro_subscriber: boolean
+          subscription_ends_at: string | null
+          // Grace period
+          grace_period_active: boolean
+          grace_period_ends_at: string | null
+          last_payment_failed_at: string | null
+          welcome_credit_granted: boolean
+          // Seeker premium metadata
+          visa_status: VisaStatus | null
+          visa_expiry: string | null
+          neighborhood: string | null
+          has_sir: boolean
+          has_foodsafe: boolean
+          availability: Json
+          english_level: EnglishLevel | null
           created_at: string
         }
         Insert: {
@@ -30,6 +175,22 @@ export interface Database {
           visa_type?: string
           avatar_url?: string
           no_show_count?: number
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          credit_count?: number
+          pro_subscriber?: boolean
+          subscription_ends_at?: string | null
+          grace_period_active?: boolean
+          grace_period_ends_at?: string | null
+          last_payment_failed_at?: string | null
+          welcome_credit_granted?: boolean
+          visa_status?: VisaStatus | null
+          visa_expiry?: string | null
+          neighborhood?: string | null
+          has_sir?: boolean
+          has_foodsafe?: boolean
+          availability?: Json
+          english_level?: EnglishLevel | null
           created_at?: string
         }
         Update: {
@@ -41,6 +202,22 @@ export interface Database {
           visa_type?: string
           avatar_url?: string
           no_show_count?: number
+          stripe_customer_id?: string | null
+          stripe_subscription_id?: string | null
+          credit_count?: number
+          pro_subscriber?: boolean
+          subscription_ends_at?: string | null
+          grace_period_active?: boolean
+          grace_period_ends_at?: string | null
+          last_payment_failed_at?: string | null
+          welcome_credit_granted?: boolean
+          visa_status?: VisaStatus | null
+          visa_expiry?: string | null
+          neighborhood?: string | null
+          has_sir?: boolean
+          has_foodsafe?: boolean
+          availability?: Json
+          english_level?: EnglishLevel | null
           created_at?: string
         }
         Relationships: []
@@ -90,6 +267,33 @@ export interface Database {
           custom_questions?: Json
           deadline?: string | null
           created_at?: string
+        }
+        Relationships: []
+      }
+      job_post_requirements: {
+        Row: {
+          job_id: string
+          preferred_days: string[]
+          preferred_shifts: string[]
+          required_certificate_ids: string[]
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          job_id: string
+          preferred_days?: string[]
+          preferred_shifts?: string[]
+          required_certificate_ids?: string[]
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          job_id?: string
+          preferred_days?: string[]
+          preferred_shifts?: string[]
+          required_certificate_ids?: string[]
+          created_at?: string
+          updated_at?: string
         }
         Relationships: []
       }
@@ -261,15 +465,156 @@ export interface Database {
         }
         Relationships: []
       }
+      certificates: {
+        Row: {
+          id: string
+          code: string
+          label_ko: string
+          label_en: string
+          category: string
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          code: string
+          label_ko: string
+          label_en: string
+          category?: string
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          code?: string
+          label_ko?: string
+          label_en?: string
+          category?: string
+          created_at?: string
+        }
+        Relationships: []
+      }
+      seeker_certificates: {
+        Row: {
+          seeker_id: string
+          certificate_id: string
+          issued_at: string | null
+          expires_at: string | null
+          created_at: string
+        }
+        Insert: {
+          seeker_id: string
+          certificate_id: string
+          issued_at?: string | null
+          expires_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          seeker_id?: string
+          certificate_id?: string
+          issued_at?: string | null
+          expires_at?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      notifications: {
+        Row: {
+          id: string
+          user_id: string
+          type: string
+          title: string
+          body: string | null
+          link: string | null
+          metadata: Json
+          read_at: string | null
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          type: string
+          title: string
+          body?: string | null
+          link?: string | null
+          metadata?: Json
+          read_at?: string | null
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          type?: string
+          title?: string
+          body?: string | null
+          link?: string | null
+          metadata?: Json
+          read_at?: string | null
+          created_at?: string
+        }
+        Relationships: []
+      }
+      employer_seeker_views: {
+        Row: {
+          employer_id: string
+          seeker_id: string
+          first_viewed_at: string
+          last_viewed_at: string
+          view_count: number
+        }
+        Insert: {
+          employer_id: string
+          seeker_id: string
+          first_viewed_at?: string
+          last_viewed_at?: string
+          view_count?: number
+        }
+        Update: {
+          employer_id?: string
+          seeker_id?: string
+          first_viewed_at?: string
+          last_viewed_at?: string
+          view_count?: number
+        }
+        Relationships: []
+      }
     }
     Views: {
-      [_ in never]: never
+      profiles_public: {
+        Row: PublicProfile
+        Relationships: []
+      }
     }
     Functions: {
-      [_ in never]: never
+      grant_welcome_credit: {
+        Args: { p_user_id: string }
+        Returns: number
+      }
+      view_seeker_profile: {
+        Args: { p_seeker_id: string }
+        Returns: ViewSeekerProfileResult
+      }
+      match_seekers_to_job: {
+        Args: { p_job_id: string }
+        Returns: SeekerMatch[]
+      }
+      expire_grace_periods: {
+        Args: Record<string, never>
+        Returns: number
+      }
+      get_employer_billing_status: {
+        Args: Record<string, never>
+        Returns: EmployerBillingStatus
+      }
+      is_pro_employer: {
+        Args: { p_viewer_id: string }
+        Returns: boolean
+      }
+      has_employer_viewed_seeker: {
+        Args: { p_employer_id: string; p_seeker_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      visa_status_enum: VisaStatus
     }
     CompositeTypes: {
       [_ in never]: never
