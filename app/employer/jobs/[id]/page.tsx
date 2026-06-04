@@ -15,7 +15,7 @@ type CustomAnswer = {
 
 type JobPost = Database['public']['Tables']['job_posts']['Row']
 type Application = Database['public']['Tables']['applications']['Row'] & {
-  profiles: { name: string; bio: string; visa_type: string } | null
+  profiles: { name: string; bio: string; visa_type: string; no_show_count: number } | null
 }
 
 export default function EmployerJobDetailPage() {
