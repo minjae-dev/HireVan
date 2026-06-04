@@ -8,7 +8,8 @@ import { supabase } from '@/lib/supabase'
 
 const LOCATION_OPTIONS = ['다운타운', '버나비', '서리', '코퀴틀람', '리치몬드', '노스밴쿠버', '기타']
 const JOB_TYPE_OPTIONS = ['카페', '식당', '네일숍', '편의점', '소매점', '청소용역', '배송', '기타']
-const MAX_QUESTIONS = 3
+const MAX_QUESTIONS_FREE = 3
+const MAX_QUESTIONS_PRO = 5
 
 export default function EmployerNewJobPage() {
   const router = useRouter()
@@ -29,6 +30,8 @@ export default function EmployerNewJobPage() {
   const [error, setError] = useState('')
   const [requireResume, setRequireResume] = useState(false)
   const [questions, setQuestions] = useState<string[]>([])
+  const isPro = profile?.plan === 'pro'
+  const maxQuestions = isPro ? MAX_QUESTIONS_PRO : MAX_QUESTIONS_FREE
 
   // 권한 확인
   if (!loading && (!user || profile?.role !== 'employer')) {
@@ -145,7 +148,7 @@ export default function EmployerNewJobPage() {
   }
 
   const handleAddQuestion = () => {
-    if (questions.length >= MAX_QUESTIONS) return
+    if (questions.length >= maxQuestions) return
     setQuestions(prev => [...prev, ''])
   }
 
@@ -319,6 +322,7 @@ export default function EmployerNewJobPage() {
               </div>
               <p className="text-xs leading-relaxed text-gray-500">
                 필요한 서류와 사전 질문을 받아 더 잘 맞는 지원자를 빠르게 확인하세요.
+                {isPro && ' (PRO: 최대 5개)'}
               </p>
             </div>
           </div>
@@ -350,12 +354,12 @@ export default function EmployerNewJobPage() {
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
                 <p className="text-sm font-semibold text-gray-900">지원자에게 사전 질문하기</p>
-                <p className="mt-0.5 text-xs text-gray-400">최대 {MAX_QUESTIONS}개까지 단답형 질문을 추가할 수 있습니다.</p>
+                <p className="mt-0.5 text-xs text-gray-400">최대 {maxQuestions}개까지 단답형 질문을 추가할 수 있습니다.</p>
               </div>
               <button
                 type="button"
                 onClick={handleAddQuestion}
-                disabled={questions.length >= MAX_QUESTIONS}
+                disabled={questions.length >= maxQuestions}
                 className="flex-shrink-0 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-bold text-orange-600 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
               >
                 + 추가
