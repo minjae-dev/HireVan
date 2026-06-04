@@ -1,11 +1,11 @@
 'use client'
 
-import { useState, useEffect } from 'react'
-import { useParams, useRouter } from 'next/navigation'
-import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import type { Database, Json } from '@/lib/database.types'
+import { supabase } from '@/lib/supabase'
+import Link from 'next/link'
+import { useParams, useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 
 type CustomQuestion = {
   id: string
@@ -39,8 +39,7 @@ export default function JobDetailPage() {
   const [applications, setApplications] = useState<Application[]>([])
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [resume, setResume] = useState<Resume | null>(null)
-  const [showApplyForm, setShowApplyForm] = useState(false)
-  const [answers, setAnswers] = useState<{ [questionId: string]: string }>({})
+  const [answers, setAnswers] = useState<{ [key: string]: string }>({})
   const [applyError, setApplyError] = useState('')
 
   useEffect(() => {
@@ -50,8 +49,25 @@ export default function JobDetailPage() {
         .select('*, profiles(name, bio)')
         .eq('id', id)
         .maybeSingle()
-      setJob(data as unknown as JobPost | null)
+      const jobData = data as unknown as JobPost | null
+      setJob(jobData)
       setLoading(false)
+      // Initialize answers from custom questions
+      if (jobData) {
+        const fromDb = parseCustomQuestions(jobData.custom_questions)
+        // Also parse from description [사전질문] marker
+        const desc = jobData.description ?? ''
+        const pregMatch = desc.match(/\[사전질문\]\s*(.+)/)
+        const fromDesc = pregMatch
+          ? pregMatch[1].split(/,\s*/).filter(Boolean).map((q, i) => ({ id: `descq_${i + 1}`, question: q.trim() }))
+          : []
+        const questions = fromDb.length > 0 ? fromDb : fromDesc
+        const initialized: { [questionId: string]: string } = {}
+        for (const q of questions) {
+          initialized[q.id] = ''
+        }
+        setAnswers(initialized)
+      }
     }
     fetchJob()
   }, [id])
@@ -92,148 +108,9 @@ export default function JobDetailPage() {
     }
   }, [profile, id, job])
 
-  // Reset answers when questions change
-  useEffect(() => {
-    if (!job) return
-    const questions = parseCustomQuestions(job.custom_questions)
-    const initialized: { [questionId: string]: string } = {}
-    for (const q of questions) {
-      initialized[q.id] = ''
-    }
-    setAnswers(initialized)
-  }, [job])
 
   const handleAnswerChange = (questionId: string, value: string) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }))
-  }
-
-  const handleApply = async () => {
-    if (!user || !profile) {
-      router.push('/login')
-      return
-    }
-    if (!job) return
-
-    // Already applied check
-    const { data: existingApp } = await supabase
-      .from('applications')
-      .select('id')
-      .eq('job_post_id', id)
-      .eq('seeker_id', profile.id)
-      .maybeSingle()
-
-    if (existingApp) {
-      setApplyError('이미 지원한 구인글입니다.')
-      setApplied(true)
-      return
-    }
-
-    const customQuestions = parseCustomQuestions(job.custom_questions)
-    const needsResume = job.require_resume === true
-
-    if (needsResume && !resume) {
-      setApplyError('이 구인글은 이력서 등록이 필수입니다. 프로필에서 이력서를 업로드해주세요.')
-      return
-    }
-
-    // Show form if questions exist and form not yet shown
-    if (customQuestions.length > 0 && !showApplyForm) {
-      setShowApplyForm(true)
-      setApplyError('')
-      return
-    }
-
-    // Build custom_answers with question text included
-    const customAnswers: CustomAnswer[] = customQuestions.map(q => ({
-      id: q.id,
-      question: q.question,
-      answer: (answers[q.id] ?? '').trim(),
-    }))
-
-    // Validate all answers are filled
-    const unanswered = customAnswers.filter(a => !a.answer)
-    if (unanswered.length > 0) {
-      setApplyError(`모든 질문에 답해야 지원할 수 있습니다. (${unanswered.length}개 미답변)`)
-      return
-    }
-
-    if (needsResume && !resume) {
-      setApplyError('이력서가 확인되지 않았습니다. 프로필에서 이력서를 등록해주세요.')
-      return
-    }
-
-    setApplying(true)
-    setApplyError('')
-
-    const resumeUrl = resume?.file_url ?? null
-
-    const { error: appError } = await supabase
-      .from('applications')
-      .insert({
-        job_post_id: id,
-        seeker_id: profile.id,
-        status: 'pending',
-        resume_url: resumeUrl || undefined,
-        custom_answers: customAnswers.length > 0 ? customAnswers as unknown as Json : undefined,
-      })
-
-    if (appError) {
-      if (appError.code === '23505') {
-        setApplyError('이미 지원한 구인글입니다.')
-        setApplied(true)
-      } else {
-        setApplyError('지원 처리에 실패했습니다. 잠시 후 다시 시도해주세요.')
-      }
-      setApplying(false)
-      return
-    }
-
-    // Auto-create chat room + application card message
-    try {
-      const { data: existingRoom } = await supabase
-        .from('chat_rooms')
-        .select('id')
-        .eq('job_post_id', id)
-        .eq('seeker_id', profile.id)
-        .maybeSingle()
-
-      let chatRoomId: string
-
-      if (existingRoom?.id) {
-        chatRoomId = existingRoom.id
-      } else {
-        const { data: newRoom, error: roomError } = await supabase
-          .from('chat_rooms')
-          .insert({
-            job_post_id: id,
-            employer_id: job.employer_id,
-            seeker_id: profile.id,
-          })
-          .select('id')
-          .single()
-
-        if (roomError || !newRoom) throw roomError
-        chatRoomId = newRoom.id
-      }
-
-      const qaSection = customAnswers.length > 0
-        ? '\n\n' + customAnswers.map(a => `Q: ${a.question}\nA: ${a.answer}`).join('\n\n')
-        : ''
-      const resumeSection = resumeUrl ? `이력서 보기: ${resumeUrl}` : '이력서: 미첨부'
-
-      const cardMessage = `새 지원서가 접수되었습니다!\n\n${resumeSection}${qaSection}`
-
-      await supabase.from('messages').insert({
-        chat_room_id: chatRoomId,
-        sender_id: profile.id,
-        content: cardMessage,
-      })
-    } catch {
-      // Best-effort: application already succeeded
-    }
-
-    setApplied(true)
-    setApplying(false)
   }
 
   const handleApplicationStatus = async (appId: string, status: 'accepted' | 'rejected', seekerId: string) => {
@@ -246,20 +123,55 @@ export default function JobDetailPage() {
       .eq('id', appId)
 
     if (status === 'accepted') {
-      const existing = await supabase
+      // Find the application to get resume_url and custom_answers
+      const appData = applications.find(a => a.id === appId)
+
+      // Ensure chat room exists
+      const { data: existing } = await supabase
         .from('chat_rooms')
         .select('id')
         .eq('job_post_id', job.id)
         .eq('seeker_id', seekerId)
         .maybeSingle()
 
-      if (!existing.data) {
-        await supabase.from('chat_rooms').insert({
-          job_post_id: job.id,
-          employer_id: user.id,
-          seeker_id: seekerId,
-        })
+      let chatRoomId: string
+      if (existing?.id) {
+        chatRoomId = existing.id
+      } else {
+        const { data: newRoom, error: roomError } = await supabase
+          .from('chat_rooms')
+          .insert({
+            job_post_id: job.id,
+            employer_id: user.id,
+            seeker_id: seekerId,
+          })
+          .select('id')
+          .single()
+        if (roomError || !newRoom) {
+          setActionLoading(null)
+          return
+        }
+        chatRoomId = newRoom.id
       }
+
+      // Build application summary message
+      const resumeUrl = appData?.resume_url ?? '미첨부'
+      const customAnswers = parseCustomAnswers(appData?.custom_answers ?? null)
+      const qaText = customAnswers.length > 0
+        ? '\n' + customAnswers.map(a => `❓ Q: ${a.question}\n➡️ A: ${a.answer}`).join('\n\n')
+        : ''
+
+      const summaryMessage = `📢 지원이 수락되었습니다! 대화를 시작합니다.\n\n📄 이력서 URL: ${resumeUrl}${qaText}`
+
+      await supabase.from('messages').insert({
+        chat_room_id: chatRoomId,
+        sender_id: user.id,
+        content: summaryMessage,
+      })
+
+      // Redirect employer to the chat room
+      router.push(`/chat/${chatRoomId}`)
+      return
     }
 
     setApplications(prev =>
@@ -300,20 +212,107 @@ export default function JobDetailPage() {
 
   const isOwner = profile?.id === job.employer_id
   const isSeeker = profile?.role === 'seeker'
-  const customQuestions = parseCustomQuestions(job.custom_questions)
-  const needsResume = job.require_resume === true
-  const cannotApplyBecauseResume = isSeeker && needsResume && !resume
 
-  useEffect(() => {
-    if (customQuestions.length > 0) {
-      const allAnswered = customQuestions.every(
-        (q) => (answers[q.id] ?? '').trim() !== ''
-      );
-      setIsApplyButtonDisabled(!allAnswered);
-    } else {
-      setIsApplyButtonDisabled(false);
+  // ── Parse metadata from job.description (the employer embeds these as text markers) ──
+  const descriptionText = job.description ?? ''
+  const hasResumeMarker = /\[이력서필수\]/.test(descriptionText)
+  const needsResume = job.require_resume === true || hasResumeMarker
+
+  // Parse questions from [사전질문] marker in description
+  const pregMatch = descriptionText.match(/\[사전질문\]\s*(.+)/)
+  const pregQuestionsFromDesc: CustomQuestion[] = pregMatch
+    ? pregMatch[1]
+        .split(/,\s*/)
+        .filter(Boolean)
+        .map((q, i) => ({ id: `descq_${i + 1}`, question: q.trim() }))
+    : []
+  const customQuestions =
+    parseCustomQuestions(job.custom_questions).length > 0
+      ? parseCustomQuestions(job.custom_questions)
+      : pregQuestionsFromDesc
+
+  // Clean description for display: strip all metadata markers
+  const cleanDescription = descriptionText
+    .replace(/\[이력서필수\]\s*/g, '')
+    .replace(/\[마감:[^\]]*\]\s*/g, '')
+    .replace(/\[사전질문\][\s\S]*$/, '')
+    .replace(/\[([^\]]+)\]\s*/g, '')
+    .trim()
+
+  // ── Validation ──
+  const cannotApplyBecauseResume = isSeeker && needsResume && !resume
+  const isQuestionsValid =
+    customQuestions.length === 0 ||
+    customQuestions.every(q => (answers[q.id] ?? '').trim() !== '')
+  const canSubmit = isQuestionsValid && !applying
+
+  // ── handleApply: include parsed description answers in payload ──
+  const handleApplyWrapper = async () => {
+    if (!user || !profile) {
+      router.push('/login')
+      return
     }
-  }, [answers, customQuestions]);
+    if (!job) return
+
+    const { data: existingApp } = await supabase
+      .from('applications')
+      .select('id')
+      .eq('job_post_id', id)
+      .eq('seeker_id', profile.id)
+      .maybeSingle()
+
+    if (existingApp) {
+      setApplyError('이미 지원한 구인글입니다.')
+      setApplied(true)
+      return
+    }
+
+    if (needsResume && !resume) {
+      setApplyError('이 구인글은 이력서 등록이 필수입니다. 프로필에서 이력서를 업로드해주세요.')
+      return
+    }
+
+    const customAnswers: CustomAnswer[] = customQuestions.map(q => ({
+      id: q.id,
+      question: q.question,
+      answer: (answers[q.id] ?? '').trim(),
+    }))
+
+    const unanswered = customAnswers.filter(a => !a.answer)
+    if (unanswered.length > 0) {
+      setApplyError(`모든 질문에 답해야 지원할 수 있습니다. (${unanswered.length}개 미답변)`)
+      return
+    }
+
+    setApplying(true)
+    setApplyError('')
+
+    const resumeUrl = resume?.file_url ?? null
+
+    const { error: appError } = await supabase
+      .from('applications')
+      .insert({
+        job_post_id: id,
+        seeker_id: profile.id,
+        status: 'pending',
+        resume_url: resumeUrl || undefined,
+        custom_answers: customAnswers.length > 0 ? (customAnswers as unknown as Json) : undefined as unknown as Json,
+      })
+
+    if (appError) {
+      if (appError.code === '23505') {
+        setApplyError('이미 지원한 구인글입니다.')
+        setApplied(true)
+      } else {
+        setApplyError('지원 처리에 실패했습니다. 잠시 후 다시 시도해주세요.')
+      }
+      setApplying(false)
+      return
+    }
+
+    setApplied(true)
+    setApplying(false)
+  }
 
   return (
     <div>
@@ -341,35 +340,19 @@ export default function JobDetailPage() {
           {job.work_hours && <InfoChip icon="🕐" text={job.work_hours} />}
         </div>
 
-        {job.description && (
+        {cleanDescription && (
           <div className="border-t border-gray-100 pt-4">
             <h2 className="text-sm font-semibold text-gray-700 mb-2">상세 내용</h2>
-            <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{job.description}</p>
+            <p className="text-sm text-gray-600 leading-relaxed whitespace-pre-line">{cleanDescription}</p>
           </div>
         )}
 
-        {(needsResume || customQuestions.length > 0) && (
+        {needsResume && (
           <div className="border-t border-gray-100 pt-4 mt-4">
             <h2 className="text-sm font-semibold text-gray-700 mb-3">지원 조건</h2>
-            <div className="flex flex-col gap-2">
-              {needsResume && (
-                <div className="rounded-xl bg-orange-50 px-4 py-3">
-                  <p className="text-sm font-semibold text-orange-700">이력서 첨부 필수</p>
-                  <p className="text-xs text-orange-600/80 mt-0.5">프로필에 등록된 이력서가 함께 제출됩니다.</p>
-                </div>
-              )}
-              {customQuestions.length > 0 && (
-                <div className="rounded-xl bg-gray-50 px-4 py-3">
-                  <p className="text-sm font-semibold text-gray-800">사전 질문 {customQuestions.length}개</p>
-                  <div className="mt-2 space-y-1">
-                    {customQuestions.map((question, index) => (
-                      <p key={question.id} className="text-xs text-gray-500">
-                        {index + 1}. {question.question}
-                      </p>
-                    ))}
-                  </div>
-                </div>
-              )}
+            <div className="rounded-xl bg-orange-50 px-4 py-3">
+              <p className="text-sm font-semibold text-orange-700">이력서 첨부 필수</p>
+              <p className="text-xs text-orange-600/80 mt-0.5">프로필에 등록된 이력서가 함께 제출됩니다.</p>
             </div>
           </div>
         )}
@@ -402,22 +385,22 @@ export default function JobDetailPage() {
             </div>
           )}
 
-          {showApplyForm && customQuestions.length > 0 && !applied && (
+          {customQuestions.length > 0 && !applied && (
             <div className="mb-3 rounded-2xl border border-gray-100 bg-white p-5">
               <h2 className="text-base font-bold text-gray-900">사전 질문 답변</h2>
               <p className="text-sm text-gray-500 mt-1 mb-4">업체가 확인할 수 있도록 모든 질문에 답변해주세요.</p>
               <div className="space-y-4">
                 {customQuestions.map((question, index) => (
-                  <div key={question.id}>
-                    <label className="mb-1.5 block text-sm font-semibold text-gray-800">
+                  <div key={question.id} className="flex flex-col gap-2">
+                    <label className="text-sm font-semibold text-gray-700">
                       {index + 1}. {question.question}
                     </label>
-                    <input
-                      type="text"
+                    <textarea
                       value={answers[question.id] ?? ''}
                       onChange={e => handleAnswerChange(question.id, e.target.value)}
-                      placeholder="답변을 입력해주세요"
-                      className="w-full rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-orange-300"
+                      placeholder="답변을 입력해주세요."
+                      rows={3}
+                      className="w-full border border-gray-300 rounded-xl p-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
                     />
                   </div>
                 ))}
@@ -430,22 +413,20 @@ export default function JobDetailPage() {
           )}
 
           <button
-            onClick={handleApply}
-            disabled={
-              applied ||
-              applying ||
-              cannotApplyBecauseResume ||
-              (showApplyForm && isApplyButtonDisabled)
-            }
-            className="w-full text-white font-semibold py-4 rounded-2xl transition-all active:scale-95 disabled:opacity-60"
-            style={{ backgroundColor: applied || cannotApplyBecauseResume ? '#9ca3af' : 'var(--brand)' }}
+            onClick={handleApplyWrapper}
+            disabled={!canSubmit || applied || cannotApplyBecauseResume}
+            className={`w-full font-bold py-4 rounded-2xl transition-all mt-6 ${
+              canSubmit && !applied && !cannotApplyBecauseResume
+                ? 'bg-orange-500 text-white cursor-pointer hover:bg-orange-600 active:scale-95'
+                : 'bg-gray-200 text-gray-400 cursor-not-allowed'
+            }`}
           >
             {applying
               ? '지원 중...'
               : applied
               ? '이미 지원했습니다'
-              : showApplyForm && customQuestions.length > 0
-              ? '답변 제출하고 지원하기'
+              : customQuestions.length > 0 && !isQuestionsValid
+              ? '사전 질문을 모두 입력해주세요'
               : '지원하기'}
           </button>
         </div>

@@ -24,7 +24,25 @@ type ChatRoom = {
   seeker: { name: string } | null
 }
 
+type InterviewProposal = {
+  date: string
+  time: string
+  location: string
+  status: 'pending' | 'confirmed' | 'declined'
+}
+
 const RATING_LABELS = ['', '아쉬웠어요', '조금 아쉬웠어요', '보통이에요', '좋았어요', '최고였어요']
+
+const INTERVIEW_PREFIX = '[INTERVIEW_PROPOSAL]'
+
+function parseProposal(content: string): InterviewProposal | null {
+  if (!content.startsWith(INTERVIEW_PREFIX)) return null
+  try {
+    return JSON.parse(content.slice(INTERVIEW_PREFIX.length)) as InterviewProposal
+  } catch {
+    return null
+  }
+}
 
 export default function ChatRoomPage() {
   const { id } = useParams<{ id: string }>()
@@ -44,6 +62,13 @@ export default function ChatRoomPage() {
   const [reviewError, setReviewError] = useState('')
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+
+  // ── Interview scheduling state ──
+  const [showScheduleModal, setShowScheduleModal] = useState(false)
+  const [scheduleDate, setScheduleDate] = useState('')
+  const [scheduleTime, setScheduleTime] = useState('')
+  const [scheduleLocation, setScheduleLocation] = useState('')
+  const [scheduling, setScheduling] = useState(false)
 
   // 채팅방 로드
   const fetchRoom = useCallback(async () => {
@@ -139,6 +164,25 @@ export default function ChatRoomPage() {
         {
           event: 'UPDATE',
           schema: 'public',
+          table: 'messages',
+          filter: `chat_room_id=eq.${id}`,
+        },
+        async payload => {
+          const { data } = await supabase
+            .from('messages')
+            .select('*, profiles(name)')
+            .eq('id', payload.new.id)
+            .maybeSingle()
+          if (data) {
+            setMessages(prev => prev.map(m => (m.id === data.id ? (data as unknown as Message) : m)))
+          }
+        },
+      )
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
           table: 'chat_rooms',
           filter: `id=eq.${id}`,
         },
@@ -210,6 +254,59 @@ export default function ChatRoomPage() {
     setComment('')
     setRating(5)
     setSubmittingReview(false)
+  }
+
+  // ── Interview scheduling handlers ──
+  const handleProposeInterview = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!user || !scheduleDate || !scheduleTime || !scheduleLocation.trim()) return
+    setScheduling(true)
+
+    const proposal: InterviewProposal = {
+      date: scheduleDate,
+      time: scheduleTime,
+      location: scheduleLocation.trim(),
+      status: 'pending',
+    }
+
+    const content = `${INTERVIEW_PREFIX}${JSON.stringify(proposal)}`
+
+    await supabase.from('messages').insert({
+      chat_room_id: id as string,
+      sender_id: user.id,
+      content,
+    })
+
+    setScheduleDate('')
+    setScheduleTime('')
+    setScheduleLocation('')
+    setScheduling(false)
+    setShowScheduleModal(false)
+  }
+
+  const handleConfirmInterview = async (msg: Message) => {
+    const proposal = parseProposal(msg.content)
+    if (!proposal) return
+    proposal.status = 'confirmed'
+    const newContent = `${INTERVIEW_PREFIX}${JSON.stringify(proposal)}`
+    await supabase.from('messages').update({ content: newContent }).eq('id', msg.id)
+
+    // Drop system message
+    if (user) {
+      await supabase.from('messages').insert({
+        chat_room_id: id as string,
+        sender_id: user.id,
+        content: 'System: 면접 일정이 확정되었습니다!',
+      })
+    }
+  }
+
+  const handleDeclineInterview = async (msg: Message) => {
+    const proposal = parseProposal(msg.content)
+    if (!proposal) return
+    proposal.status = 'declined'
+    const newContent = `${INTERVIEW_PREFIX}${JSON.stringify(proposal)}`
+    await supabase.from('messages').update({ content: newContent }).eq('id', msg.id)
   }
 
   if (!room) {
@@ -302,11 +399,83 @@ export default function ChatRoomPage() {
         )}
 
         {messages.map((msg, idx) => {
+          const proposal = parseProposal(msg.content)
+
+          // ── Interview proposal card ──
+          if (proposal) {
+            const confirmed = proposal.status === 'confirmed'
+            const declined = proposal.status === 'declined'
+            const pending = proposal.status === 'pending'
+            const isSeeker = room.seeker_id === user?.id
+
+            return (
+              <div key={msg.id} className="flex justify-center">
+                <div className={`w-full max-w-sm rounded-2xl border p-4 ${
+                  confirmed
+                    ? 'bg-green-50 border-green-200'
+                    : declined
+                    ? 'bg-gray-50 border-gray-200'
+                    : 'bg-orange-50 border-orange-200'
+                }`}>
+                  <div className="flex items-center gap-2 mb-3">
+                    <span className="text-lg">📅</span>
+                    <span className="font-bold text-sm text-gray-800">면접 제안</span>
+                    {pending && <span className="ml-auto text-xs font-semibold text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">대기 중</span>}
+                    {confirmed && <span className="ml-auto text-xs font-semibold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">확정됨</span>}
+                    {declined && <span className="ml-auto text-xs font-semibold text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">거절됨</span>}
+                  </div>
+
+                  <div className="space-y-1.5 text-sm text-gray-700">
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400 w-5">📆</span>
+                      <span>{proposal.date}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400 w-5">🕐</span>
+                      <span>{proposal.time}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-400 w-5">📍</span>
+                      <span>{proposal.location}</span>
+                    </div>
+                  </div>
+
+                  {pending && isSeeker && (
+                    <div className="mt-4 flex gap-2">
+                      <button
+                        onClick={() => handleConfirmInterview(msg)}
+                        className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white transition-all active:scale-95"
+                        style={{ backgroundColor: 'var(--brand)' }}
+                      >
+                        수락 및 확정
+                      </button>
+                      <button
+                        onClick={() => handleDeclineInterview(msg)}
+                        className="flex-1 py-2.5 rounded-xl text-xs font-bold text-red-500 border border-red-200 bg-white hover:bg-red-50 transition-all active:scale-95"
+                      >
+                        거절
+                      </button>
+                    </div>
+                  )}
+
+                  {!pending && (
+                    <p className="mt-3 text-xs text-gray-400 text-center">
+                      {confirmed ? '✅ 면접 일정이 확정되었습니다.' : '❌ 면접 제안이 거절되었습니다.'}
+                    </p>
+                  )}
+
+                  <p className="mt-2 text-xs text-gray-300 text-right">
+                    {new Date(msg.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                  </p>
+                </div>
+              </div>
+            )
+          }
+
+          // ── Regular message bubble ──
           const isMine = msg.sender_id === user?.id
           const prevMsg = messages[idx - 1]
-          const showName =
-            !isMine &&
-            (!prevMsg || prevMsg.sender_id !== msg.sender_id)
+          const showName = !isMine && (!prevMsg || prevMsg.sender_id !== msg.sender_id)
 
           return (
             <div key={msg.id} className={`flex ${isMine ? 'justify-end' : 'justify-start'}`}>
@@ -350,6 +519,15 @@ export default function ChatRoomPage() {
           placeholder="메시지를 입력하세요..."
           className="flex-1 border border-gray-200 rounded-2xl px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent"
         />
+        {isEmployer && !room.interview_completed && (
+          <button
+            type="button"
+            onClick={() => setShowScheduleModal(true)}
+            className="text-xs font-semibold text-orange-600 bg-orange-50 border border-orange-200 px-3 py-2.5 rounded-2xl hover:bg-orange-100 transition-all active:scale-95 flex-shrink-0"
+          >
+            📅 면접 제안
+          </button>
+        )}
         <button
           type="submit"
           disabled={!input.trim() || sending}
@@ -365,6 +543,70 @@ export default function ChatRoomPage() {
           )}
         </button>
       </form>
+
+      {/* ── Schedule Interview Modal ── */}
+      {showScheduleModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-3 pb-3 sm:items-center sm:pb-0">
+          <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold text-orange-500">면접 제안</p>
+                <h2 className="mt-1 text-xl font-bold text-gray-900">면접 일정을 제안하세요</h2>
+                <p className="mt-1 text-sm text-gray-500">날짜, 시간, 장소를 입력해주세요.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowScheduleModal(false)}
+                className="rounded-full bg-gray-100 px-3 py-1.5 text-sm text-gray-500"
+              >
+                닫기
+              </button>
+            </div>
+
+            <form onSubmit={handleProposeInterview} className="space-y-4">
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-gray-800">날짜</label>
+                <input
+                  type="date"
+                  value={scheduleDate}
+                  onChange={e => setScheduleDate(e.target.value)}
+                  className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-orange-300"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-gray-800">시간</label>
+                <input
+                  type="time"
+                  value={scheduleTime}
+                  onChange={e => setScheduleTime(e.target.value)}
+                  className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-orange-300"
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 block text-sm font-semibold text-gray-800">장소 / 화상 링크</label>
+                <input
+                  type="text"
+                  value={scheduleLocation}
+                  onChange={e => setScheduleLocation(e.target.value)}
+                  placeholder="예: 강남역 스타벅스 2층"
+                  className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-orange-300"
+                />
+              </div>
+
+              <button
+                type="submit"
+                disabled={scheduling || !scheduleDate || !scheduleTime || !scheduleLocation.trim()}
+                className="w-full rounded-2xl py-3.5 font-semibold text-white transition-all active:scale-95 disabled:opacity-60"
+                style={{ backgroundColor: 'var(--brand)' }}
+              >
+                {scheduling ? '제안 중...' : '면접 제안하기'}
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
 
       {showReviewModal && (
         <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-3 pb-3 sm:items-center sm:pb-0">
