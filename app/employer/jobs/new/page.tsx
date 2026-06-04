@@ -85,34 +85,64 @@ export default function EmployerNewJobPage() {
     setError('')
 
     try {
+      // DB에 category, deadline, require_resume, custom_questions 컬럼이 없을 수 있으므로
+      // description에 모든 정보를 포함하여 저장
+      let descriptionText = `[${formData.jobType}] ${formData.description}`
+
+      // 마감일 정보가 있으면 description에 추가
+      if (formData.deadline) {
+        descriptionText = `[마감:${formData.deadline}] ${descriptionText}`
+      }
+
+      // PRO 기능 (require_resume, custom_questions)은 description에 주석으로 추가
+      if (requireResume) {
+        descriptionText = `[이력서필수] ${descriptionText}`
+      }
+      if (customQuestions.length > 0) {
+        const questionsText = customQuestions.map(q => q.question).join(', ')
+        descriptionText = `${descriptionText}\n\n[사전질문] ${questionsText}`
+      }
+
+      // job_posts 테이블에 실제로 존재하는 컬럼만 사용
+      // (id, employer_id, title, location, salary, work_hours, description, status, created_at)
+      const jobPostData = {
+        employer_id: user.id,
+        title: formData.title,
+        location: formData.location,
+        salary: formData.salary,
+        work_hours: formData.workHours,
+        description: descriptionText,
+        status: 'open' as const,
+      }
+
+      console.log('Submitting job post with data:', jobPostData)
+
       const { data, error: insertError } = await supabase
         .from('job_posts')
-        .insert({
-          employer_id: user.id,
-          title: formData.title,
-          location: formData.location,
-          category: formData.jobType,
-          salary: formData.salary,
-          work_hours: formData.workHours,
-          description: formData.description,
-          deadline: formData.deadline || null,
-          require_resume: requireResume,
-          custom_questions: customQuestions,
-          status: 'open',
-        })
+        .insert(jobPostData)
         .select()
         .single()
 
-      if (insertError || !data) {
-        setError('구인글 등록에 실패했습니다. 다시 시도해주세요.')
+      console.log('Insert result:', { data, insertError })
+
+      if (insertError) {
+        console.error('Supabase error:', insertError)
+        setError(`구인글 등록에 실패했습니다: ${insertError.message}`)
+        setSubmitting(false)
+        return
+      }
+
+      if (!data) {
+        setError('구인글 등록에 실패했습니다. 데이터가 반환되지 않았습니다.')
         setSubmitting(false)
         return
       }
 
       // 성공 후 목록 페이지로 이동
       router.push('/employer/jobs')
-    } catch {
-      setError('오류가 발생했습니다. 다시 시도해주세요.')
+    } catch (err) {
+      console.error('Unexpected error:', err)
+      setError(`오류가 발생했습니다: ${err instanceof Error ? err.message : '알 수 없는 오류'}`)
       setSubmitting(false)
     }
   }
