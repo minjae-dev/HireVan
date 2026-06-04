@@ -110,9 +110,10 @@ export default function JobDetailPage() {
       return
     }
 
-    const customAnswers: CustomAnswer[] = customQuestions.map(question => ({
-      ...question,
-      answer: (answers[question.id] ?? '').trim(),
+    const customAnswers: { id: string; question: string; answer: string }[] = customQuestions.map(q => ({
+      id: q.id,
+      question: q.question,
+      answer: (answers[q.id] ?? '').trim(),
     }))
 
     if (customAnswers.some(answer => !answer.answer)) {
@@ -122,14 +123,65 @@ export default function JobDetailPage() {
 
     setApplying(true)
     setApplyError('')
-    const { error } = await supabase.from('applications').insert({
+    const resumeUrl = job.require_resume ? resume?.file_url ?? null : resume?.file_url ?? null
+    const { data: appData, error: appError } = await supabase.from('applications').insert({
       job_post_id: id,
       seeker_id: user.id,
-      resume_url: job.require_resume ? resume?.file_url ?? null : resume?.file_url ?? null,
+      resume_url: resumeUrl,
       custom_answers: customAnswers,
-    })
-    if (!error) setApplied(true)
-    if (error) setApplyError('지원 처리에 실패했습니다. 잠시 후 다시 시도해주세요.')
+    }).select('id').maybeSingle()
+
+    if (appError || !appData) {
+      setApplyError('지원 처리에 실패했습니다. 잠시 후 다시 시도해주세요.')
+      setApplying(false)
+      return
+    }
+
+    // Auto-create chat room + application card message
+    try {
+      const { data: existingRoom } = await supabase
+        .from('chat_rooms')
+        .select('id')
+        .eq('job_post_id', id)
+        .eq('seeker_id', user.id)
+        .maybeSingle()
+
+      let chatRoomId: string
+
+      if (existingRoom?.id) {
+        chatRoomId = existingRoom.id
+      } else {
+        const { data: newRoom, error: roomError } = await supabase
+          .from('chat_rooms')
+          .insert({
+            job_post_id: id,
+            employer_id: job.employer_id,
+            seeker_id: user.id,
+          })
+          .select('id')
+          .single()
+
+        if (roomError || !newRoom) throw roomError
+        chatRoomId = newRoom.id
+      }
+
+      const qaSection = customAnswers.length > 0
+        ? '\n\n' + customAnswers.map(a => `Q: ${a.question}\nA: ${a.answer}`).join('\n\n')
+        : ''
+      const resumeSection = resumeUrl ? `이력서 보기: ${resumeUrl}` : '이력서: 미첨부'
+
+      const cardMessage = `새 지원서가 접수되었습니다!\n\n${resumeSection}${qaSection}`
+
+      await supabase.from('messages').insert({
+        chat_room_id: chatRoomId,
+        sender_id: user.id,
+        content: cardMessage,
+      })
+    } catch {
+      // Chat room creation is best-effort; application already succeeded
+    }
+
+    setApplied(true)
     setApplying(false)
   }
 
