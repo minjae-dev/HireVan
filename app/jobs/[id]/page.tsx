@@ -43,6 +43,8 @@ export default function JobDetailPage() {
   const [canApply, setCanApply] = useState(false)
   const [uploadingResume, setUploadingResume] = useState(false)
   const [newResumeUrl, setNewResumeUrl] = useState<string | null>(null)
+  const [isApplyButtonDisabled, setIsApplyButtonDisabled] = useState(true);
+
 
   useEffect(() => {
     const fetchJob = async () => {
@@ -287,6 +289,17 @@ export default function JobDetailPage() {
   
   const cannotApplyBecauseResume = isSeeker && needsResume && !resume
 
+  useEffect(() => {
+    if (customQuestions.length > 0) {
+      const allAnswered = customQuestions.every(
+        (q) => (answers[q.id] ?? '').trim() !== ''
+      );
+      setIsApplyButtonDisabled(!allAnswered);
+    } else {
+      setIsApplyButtonDisabled(false);
+    }
+  }, [answers, customQuestions]);
+
   return (
     <div>
       <Link href="/jobs" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4">
@@ -403,11 +416,22 @@ export default function JobDetailPage() {
 
           <button
             onClick={handleApply}
-            disabled={applied || applying || cannotApplyBecauseResume}
+            disabled={
+              applied ||
+              applying ||
+              cannotApplyBecauseResume ||
+              (showApplyForm && isApplyButtonDisabled)
+            }
             className="w-full text-white font-semibold py-4 rounded-2xl transition-all active:scale-95 disabled:opacity-60"
             style={{ backgroundColor: applied || cannotApplyBecauseResume ? '#9ca3af' : 'var(--brand)' }}
           >
-            {applying ? '지원 중...' : applied ? '이미 지원했습니다' : showApplyForm && customQuestions.length > 0 ? '답변 제출하고 지원하기' : '지원하기'}
+            {applying
+              ? '지원 중...'
+              : applied
+              ? '이미 지원했습니다'
+              : showApplyForm && customQuestions.length > 0
+              ? '답변 제출하고 지원하기'
+              : '지원하기'}
           </button>
         </div>
       )}
