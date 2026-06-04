@@ -44,3 +44,10 @@ next-env.d.ts
 node_modules/
 .env
 >>>>>>> 3f45f245777d09941b1fd3d5a9bc48a1cc8df28b
+
+# Playwright
+/test-results/
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

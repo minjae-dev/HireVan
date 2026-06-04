@@ -99,11 +99,20 @@ export interface PublicProfile {
 
 /**
  * 매칭 결과 (RPC `match_seekers_to_job`).
+ *
+ * v2 시그니처:
+ *   - spec 컬럼: seeker_id, name, match_score, neighborhood, certificates
+ *   - backward-compat: matched_days, matched_certs, reason
  */
 export interface SeekerMatch {
   seeker_id: string
   name: string
   match_score: number
+  /** spec v2: 구직자 거주 구역 (PRO employer 만 노출) */
+  neighborhood: string | null
+  /** spec v2: 매칭된 자격증 라벨 배열 */
+  certificates: string[] | null
+  // ---- backward-compat (기존 클라이언트가 참조하던 필드) ----
   matched_days: string[]
   matched_certs: string[]
   reason: string

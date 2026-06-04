@@ -1,8 +1,8 @@
 'use client'
 
+import { useAuth } from '@/lib/auth-context'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
-import { useAuth } from '@/lib/auth-context'
 
 export default function Navbar() {
   const { user, profile, signOut, loading } = useAuth()
@@ -67,6 +67,12 @@ export default function Navbar() {
               className={`text-sm font-medium ${pathname === '/profile' ? 'text-orange-500' : 'text-gray-600'}`}
             >
               내 정보
+            </Link>
+              <Link
+              href="/employer/dashboard"
+              className={`text-sm font-medium ${pathname === '/profile' ? 'text-orange-500' : 'text-gray-600'}`}
+            >
+              대쉬보드
             </Link>
             <button
               onClick={handleSignOut}

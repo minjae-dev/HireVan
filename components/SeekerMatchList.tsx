@@ -19,6 +19,13 @@ interface SeekerMatchListProps {
  * - PRO 구독자만 사용 가능 (RPC 자체가 권한 체크)
  * - 카드 클릭 시 useSeekerAccess 로 상세 열람 시도
  *   - 크레딧 부족하면 ProUpsellModal 표시
+ *
+ * 인증 가드:
+ *   - RPC는 `auth.uid()`가 NULL이면 'unauthorized'로 실패한다.
+ *   - supabase-js는 자동으로 Bearer 헤더를 붙이지만, 페이지 첫 진입 직후
+ *     세션 하이드레이션이 늦으면 anon 상태로 호출되어 401이 난다.
+ *   - 따라서 호출 직전에 `getSession()`으로 세션 확인 후 없으면 로그인 페이지로,
+ *     있으면 한 번 더 보장한 뒤 RPC를 호출한다.
  */
 export default function SeekerMatchList({ jobId }: SeekerMatchListProps) {
   const [matches, setMatches] = useState<SeekerMatch[]>([])
@@ -33,14 +40,28 @@ export default function SeekerMatchList({ jobId }: SeekerMatchListProps) {
     setLoading(true)
     setError(null)
     try {
+      // 1) 세션 가드: 로그인되지 않은 상태에서 RPC를 호출하면
+      //    Postgres 측에서 'unauthorized' 예외가 발생한다.
+      const { data: sessionData, error: sessionErr } = await supabase.auth.getSession()
+      if (sessionErr) {
+        setError('세션 확인 중 오류가 발생했어요. 잠시 후 다시 시도해주세요.')
+        return
+      }
+      if (!sessionData.session?.user) {
+        setError('로그인이 필요해요. 다시 로그인해주세요.')
+        return
+      }
+
+      // 2) RPC 호출 (supabase-js 가 Authorization 헤더를 자동 부착)
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error: rpcError } = await (supabase as any).rpc('match_seekers_to_job', {
         p_job_id: jobId,
       })
       if (rpcError) {
-        setError(rpcError.message)
-        // PRO 권한이 없으면 업셀 모달 오픈
-        if (rpcError.message?.includes('pro_required')) {
+        const msg = rpcError.message ?? 'Unknown error'
+        setError(msg)
+        // 권한/매칭 사유별 업셀 트리거
+        if (msg.includes('pro_required') || msg.includes('unauthorized')) {
           setUpsellOpen(true)
         }
       } else {

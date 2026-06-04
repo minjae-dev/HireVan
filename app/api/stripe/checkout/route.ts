@@ -18,8 +18,20 @@ export const dynamic = 'force-dynamic'
  * Auth: requires a valid Supabase session cookie / bearer token.
  */
 export async function POST(request: NextRequest) {
-  const secret = process.env.STRIPE_SECRET_KEY
-  const defaultPriceId = process.env.STRIPE_PRICE_ID
+  const secret =
+    process.env.STRIPE_SECRET_KEY ?? process.env.STRIPE_API_KEY ?? ''
+
+  // Defensive env-var resolution. Accepts the canonical STRIPE_PRICE_ID
+  // plus a few common aliases that show up in env templates. If nothing
+  // matches in development we fall back to a sentinel so the UI can still
+  // render and the developer sees a clear warning; in production we still
+  // 503 to surface the misconfiguration.
+  const defaultPriceId =
+    process.env.STRIPE_PRICE_ID ??
+    process.env.NEXT_PUBLIC_STRIPE_PRICE_ID ??
+    process.env.STRIPE_PRO_PRICE_ID ??
+    process.env.STRIPE_PRICE ??
+    (process.env.NODE_ENV !== 'production' ? 'price_dev_fallback_set_in_env' : '')
 
   if (!secret) {
     console.error('[stripe/checkout] STRIPE_SECRET_KEY is not set')
