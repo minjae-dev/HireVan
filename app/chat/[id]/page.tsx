@@ -28,7 +28,7 @@ type InterviewProposal = {
   date: string
   time: string
   location: string
-  status: 'pending' | 'confirmed' | 'declined'
+  status: 'pending' | 'confirmed' | 'declined' | 'no_show'
 }
 
 const RATING_LABELS = ['', '아쉬웠어요', '조금 아쉬웠어요', '보통이에요', '좋았어요', '최고였어요']
@@ -307,6 +307,46 @@ export default function ChatRoomPage() {
     proposal.status = 'declined'
     const newContent = `${INTERVIEW_PREFIX}${JSON.stringify(proposal)}`
     await supabase.from('messages').update({ content: newContent }).eq('id', msg.id)
+  }
+
+  // ── No-show reporting ──
+  const [showNoShowConfirm, setShowNoShowConfirm] = useState<string | null>(null) // msg id
+
+  function isInterviewExpired(proposal: InterviewProposal): boolean {
+    if (proposal.status !== 'confirmed') return false
+    // Combine date + time into a UTC timestamp and check if > 1 hour ago
+    const dt = new Date(`${proposal.date}T${proposal.time}:00`)
+    const now = new Date()
+    return now.getTime() - dt.getTime() > 60 * 60 * 1000
+  }
+
+  const handleReportNoShow = async (msg: Message) => {
+    if (!user || !room) return
+    const proposal = parseProposal(msg.content)
+    if (!proposal) return
+
+    // Update message status to no_show
+    proposal.status = 'no_show'
+    const newContent = `${INTERVIEW_PREFIX}${JSON.stringify(proposal)}`
+    await supabase.from('messages').update({ content: newContent }).eq('id', msg.id)
+
+    // Increment seeker's no_show_count (direct update since RPC not in types)
+    const { data: seekerProfile } = await supabase
+      .from('profiles')
+      .select('no_show_count')
+      .eq('id', room.seeker_id)
+      .maybeSingle()
+    const currentCount = seekerProfile?.no_show_count ?? 0
+    await supabase.from('profiles').update({ no_show_count: currentCount + 1 }).eq('id', room.seeker_id)
+
+    // Drop system notification message
+    await supabase.from('messages').insert({
+      chat_room_id: id as string,
+      sender_id: user.id,
+      content: 'System: 노쇼(No-Show)가 신고되었습니다.',
+    })
+
+    setShowNoShowConfirm(null)
   }
 
   if (!room) {

@@ -18,6 +18,7 @@ export interface Database {
           bio: string
           visa_type: string
           avatar_url: string
+          no_show_count: number
           created_at: string
         }
         Insert: {
@@ -28,6 +29,7 @@ export interface Database {
           bio?: string
           visa_type?: string
           avatar_url?: string
+          no_show_count?: number
           created_at?: string
         }
         Update: {
@@ -38,6 +40,7 @@ export interface Database {
           bio?: string
           visa_type?: string
           avatar_url?: string
+          no_show_count?: number
           created_at?: string
         }
         Relationships: []

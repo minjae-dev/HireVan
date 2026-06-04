@@ -28,6 +28,60 @@ type Application = Database['public']['Tables']['applications']['Row'] & {
 
 type Resume = Database['public']['Tables']['resumes']['Row']
 
+type AIScore = {
+  score: number
+  summary: string[]
+}
+
+// ── Simulated AI matching engine (MVP) ──
+function computeAIScore(job: JobPost, app: Application, customAnswers: CustomAnswer[]): AIScore {
+  let score = 50
+  const points: string[] = []
+
+  // Bonus for resume attached
+  if (app.resume_url) {
+    score += 10
+    points.push('이력서 제출 완료')
+  }
+
+  // Bonus for filled custom answers
+  if (customAnswers.length > 0) {
+    score += 10
+    const allAnswered = customAnswers.every(a => a.answer.trim().length > 0)
+    if (allAnswered) {
+      score += 5
+      points.push(`사전 질문 ${customAnswers.length}개 모두 성실히 답변`)
+    } else {
+      points.push(`사전 질문 ${customAnswers.filter(a => a.answer.trim()).length}/${customAnswers.length}개 답변`)
+    }
+
+    // Extract key snippets from answers
+    const longAnswers = customAnswers.filter(a => a.answer.trim().length > 15)
+    longAnswers.slice(0, 2).forEach(a => {
+      const snippet = a.answer.trim().slice(0, 40)
+      points.push(`"${snippet}..."`)
+    })
+  }
+
+  // Bonus for bio presence
+  if (app.profiles?.bio && app.profiles.bio.length > 20) {
+    score += 10
+    const bioSnippet = app.profiles.bio.slice(0, 40)
+    points.push(`자기소개: "${bioSnippet}..."`)
+  }
+
+  // Bonus for visa info
+  if (app.profiles?.visa_type) {
+    score += 5
+    points.push(`비자: ${app.profiles.visa_type}`)
+  }
+
+  // Clamp
+  score = Math.min(100, Math.max(0, score))
+
+  return { score, summary: points.slice(0, 3) }
+}
+
 export default function JobDetailPage() {
   const { id } = useParams<{ id: string }>()
   const { user, profile } = useAuth()
@@ -41,6 +95,7 @@ export default function JobDetailPage() {
   const [resume, setResume] = useState<Resume | null>(null)
   const [answers, setAnswers] = useState<{ [key: string]: string }>({})
   const [applyError, setApplyError] = useState('')
+  const [showProModal, setShowProModal] = useState(false)
 
   useEffect(() => {
     const fetchJob = async () => {
@@ -52,10 +107,8 @@ export default function JobDetailPage() {
       const jobData = data as unknown as JobPost | null
       setJob(jobData)
       setLoading(false)
-      // Initialize answers from custom questions
       if (jobData) {
         const fromDb = parseCustomQuestions(jobData.custom_questions)
-        // Also parse from description [사전질문] marker
         const desc = jobData.description ?? ''
         const pregMatch = desc.match(/\[사전질문\]\s*(.+)/)
         const fromDesc = pregMatch
@@ -108,7 +161,6 @@ export default function JobDetailPage() {
     }
   }, [profile, id, job])
 
-
   const handleAnswerChange = (questionId: string, value: string) => {
     setAnswers(prev => ({ ...prev, [questionId]: value }))
   }
@@ -123,10 +175,7 @@ export default function JobDetailPage() {
       .eq('id', appId)
 
     if (status === 'accepted') {
-      // Find the application to get resume_url and custom_answers
       const appData = applications.find(a => a.id === appId)
-
-      // Ensure chat room exists
       const { data: existing } = await supabase
         .from('chat_rooms')
         .select('id')
@@ -154,13 +203,11 @@ export default function JobDetailPage() {
         chatRoomId = newRoom.id
       }
 
-      // Build application summary message
       const resumeUrl = appData?.resume_url ?? '미첨부'
       const customAnswers = parseCustomAnswers(appData?.custom_answers ?? null)
       const qaText = customAnswers.length > 0
         ? '\n' + customAnswers.map(a => `❓ Q: ${a.question}\n➡️ A: ${a.answer}`).join('\n\n')
         : ''
-
       const summaryMessage = `📢 지원이 수락되었습니다! 대화를 시작합니다.\n\n📄 이력서 URL: ${resumeUrl}${qaText}`
 
       await supabase.from('messages').insert({
@@ -169,7 +216,6 @@ export default function JobDetailPage() {
         content: summaryMessage,
       })
 
-      // Redirect employer to the chat room
       router.push(`/chat/${chatRoomId}`)
       return
     }
@@ -212,13 +258,12 @@ export default function JobDetailPage() {
 
   const isOwner = profile?.id === job.employer_id
   const isSeeker = profile?.role === 'seeker'
+  const isPro = profile?.plan === 'pro'
 
-  // ── Parse metadata from job.description (the employer embeds these as text markers) ──
   const descriptionText = job.description ?? ''
   const hasResumeMarker = /\[이력서필수\]/.test(descriptionText)
   const needsResume = job.require_resume === true || hasResumeMarker
 
-  // Parse questions from [사전질문] marker in description
   const pregMatch = descriptionText.match(/\[사전질문\]\s*(.+)/)
   const pregQuestionsFromDesc: CustomQuestion[] = pregMatch
     ? pregMatch[1]
@@ -231,7 +276,6 @@ export default function JobDetailPage() {
       ? parseCustomQuestions(job.custom_questions)
       : pregQuestionsFromDesc
 
-  // Clean description for display: strip all metadata markers
   const cleanDescription = descriptionText
     .replace(/\[이력서필수\]\s*/g, '')
     .replace(/\[마감:[^\]]*\]\s*/g, '')
@@ -239,14 +283,13 @@ export default function JobDetailPage() {
     .replace(/\[([^\]]+)\]\s*/g, '')
     .trim()
 
-  // ── Validation ──
   const cannotApplyBecauseResume = isSeeker && needsResume && !resume
   const isQuestionsValid =
     customQuestions.length === 0 ||
     customQuestions.every(q => (answers[q.id] ?? '').trim() !== '')
   const canSubmit = isQuestionsValid && !applying
 
-  // ── handleApply: include parsed description answers in payload ──
+  // ── handleApply ──
   const handleApplyWrapper = async () => {
     if (!user || !profile) {
       router.push('/login')
@@ -460,52 +503,133 @@ export default function JobDetailPage() {
             <p className="text-sm text-gray-400 text-center py-6">아직 지원자가 없습니다</p>
           ) : (
             <div className="flex flex-col gap-3">
-              {applications.map(app => (
-                <div key={app.id} className="border border-gray-100 rounded-xl p-4">
-                  <div className="flex items-start justify-between gap-3 mb-2">
-                    <div>
-                      <p className="font-medium text-gray-900 text-sm">{app.profiles?.name ?? '이름 없음'}</p>
-                      {app.profiles?.visa_type && (
-                        <p className="text-xs text-gray-400">{app.profiles.visa_type}</p>
-                      )}
+              {applications.map(app => {
+                const customAnswers = parseCustomAnswers(app.custom_answers)
+                const aiScore = job ? computeAIScore(job, app, customAnswers) : null
+                return (
+                  <div key={app.id} className="border border-gray-100 rounded-xl p-4">
+                    <div className="flex items-start justify-between gap-3 mb-2">
+                      <div>
+                        <p className="font-medium text-gray-900 text-sm">{app.profiles?.name ?? '이름 없음'}</p>
+                        {app.profiles?.visa_type && (
+                          <p className="text-xs text-gray-400">{app.profiles.visa_type}</p>
+                        )}
+                      </div>
+                      <StatusBadge status={app.status} />
                     </div>
-                    <StatusBadge status={app.status} />
+                    {app.profiles?.bio && (
+                      <p className="text-xs text-gray-500 line-clamp-2 mb-3 leading-relaxed">{app.profiles.bio}</p>
+                    )}
+
+                    {/* ── AI Candidate Insights ── */}
+                    {aiScore && (
+                      <div className="mb-3 relative">
+                        {/* Blur overlay for FREE plan */}
+                        {!isPro && (
+                          <div
+                            className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/60 backdrop-blur-sm rounded-xl cursor-pointer"
+                            onClick={() => setShowProModal(true)}
+                          >
+                            <span className="text-lg mb-1">🔒</span>
+                            <span className="text-xs font-semibold text-gray-500">Unlock AI Matching with PRO</span>
+                          </div>
+                        )}
+                        <div className={`rounded-xl p-3 ${isPro ? 'bg-gradient-to-br from-orange-50 to-amber-50 border border-orange-100' : ''}`}>
+                          <div className="flex items-center gap-2 mb-2">
+                            <span className="text-sm">🤖</span>
+                            <span className="text-xs font-bold text-gray-700">AI Candidate Insights</span>
+                            {isPro && (
+                              <span
+                                className={`ml-auto text-xs font-bold px-2 py-0.5 rounded-full ${
+                                  aiScore.score >= 80 ? 'bg-green-100 text-green-700' :
+                                  aiScore.score >= 50 ? 'bg-yellow-100 text-yellow-700' :
+                                  'bg-red-100 text-red-600'
+                                }`}
+                              >
+                                {aiScore.score}% Match
+                              </span>
+                            )}
+                          </div>
+
+                          {isPro && (
+                            <div className="space-y-1">
+                              {aiScore.summary.map((point, pi) => (
+                                <div key={pi} className="flex items-start gap-1.5">
+                                  <span className="text-orange-400 text-xs mt-0.5">✦</span>
+                                  <span className="text-xs text-gray-600 leading-relaxed">{point}</span>
+                                </div>
+                              ))}
+                              {aiScore.summary.length === 0 && (
+                                <p className="text-xs text-gray-400">추가 정보가 충분하지 않습니다.</p>
+                              )}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {renderApplicationDetails(app)}
+                    {app.status === 'pending' && (
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleApplicationStatus(app.id, 'accepted', app.seeker_id)}
+                          disabled={actionLoading === app.id}
+                          className="flex-1 py-2 rounded-xl text-xs font-semibold text-white transition-all active:scale-95 disabled:opacity-60"
+                          style={{ backgroundColor: 'var(--brand)' }}
+                        >
+                          수락 + 채팅
+                        </button>
+                        <button
+                          onClick={() => handleApplicationStatus(app.id, 'rejected', app.seeker_id)}
+                          disabled={actionLoading === app.id}
+                          className="flex-1 py-2 rounded-xl text-xs font-semibold text-red-500 border border-red-200 bg-white hover:bg-red-50 transition-all active:scale-95 disabled:opacity-60"
+                        >
+                          거절
+                        </button>
+                      </div>
+                    )}
+                    {app.status === 'accepted' && (
+                      <Link
+                        href="/chat"
+                        className="block text-center py-2 rounded-xl text-xs font-semibold text-orange-500 border border-orange-200 bg-orange-50 hover:bg-orange-100 transition-all"
+                      >
+                        채팅방으로 이동
+                      </Link>
+                    )}
                   </div>
-                  {app.profiles?.bio && (
-                    <p className="text-xs text-gray-500 line-clamp-2 mb-3 leading-relaxed">{app.profiles.bio}</p>
-                  )}
-                  {renderApplicationDetails(app)}
-                  {app.status === 'pending' && (
-                    <div className="flex gap-2">
-                      <button
-                        onClick={() => handleApplicationStatus(app.id, 'accepted', app.seeker_id)}
-                        disabled={actionLoading === app.id}
-                        className="flex-1 py-2 rounded-xl text-xs font-semibold text-white transition-all active:scale-95 disabled:opacity-60"
-                        style={{ backgroundColor: 'var(--brand)' }}
-                      >
-                        수락 + 채팅
-                      </button>
-                      <button
-                        onClick={() => handleApplicationStatus(app.id, 'rejected', app.seeker_id)}
-                        disabled={actionLoading === app.id}
-                        className="flex-1 py-2 rounded-xl text-xs font-semibold text-red-500 border border-red-200 bg-white hover:bg-red-50 transition-all active:scale-95 disabled:opacity-60"
-                      >
-                        거절
-                      </button>
-                    </div>
-                  )}
-                  {app.status === 'accepted' && (
-                    <Link
-                      href="/chat"
-                      className="block text-center py-2 rounded-xl text-xs font-semibold text-orange-500 border border-orange-200 bg-orange-50 hover:bg-orange-100 transition-all"
-                    >
-                      채팅방으로 이동
-                    </Link>
-                  )}
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── Upgrade to PRO Modal ── */}
+      {showProModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-3 pb-3 sm:items-center sm:pb-0">
+          <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold text-orange-500">PRO 업그레이드</p>
+                <h2 className="mt-1 text-xl font-bold text-gray-900">🔒 AI 매칭 기능을 사용하려면</h2>
+                <p className="mt-1 text-sm text-gray-500">PRO 플랜으로 업그레이드하면 AI가 분석한 맞춤 지원자 평가를 확인할 수 있습니다.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowProModal(false)}
+                className="rounded-full bg-gray-100 px-3 py-1.5 text-sm text-gray-500"
+              >
+                닫기
+              </button>
+            </div>
+            <Link
+              href="/profile"
+              className="block w-full rounded-2xl py-3.5 font-semibold text-white text-center transition-all active:scale-95"
+              style={{ backgroundColor: 'var(--brand)' }}
+            >
+              PRO 업그레이드하기
+            </Link>
+          </div>
         </div>
       )}
     </div>
