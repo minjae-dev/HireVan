@@ -12,6 +12,8 @@
   4. `chat_rooms` - Chat rooms between employer and seeker for a job post
   5. `messages` - Messages within chat rooms
   6. `reviews` - Reviews left after interview completion
+  7. `resumes` - Seeker resume files
+  8. `interviews` - Interview scheduling
 
   ## Security
   - RLS enabled on all tables
@@ -20,8 +22,8 @@
   - Public read access for job_posts (open), profiles, and reviews
 
   ## Test Accounts
-  - employer@test.com / test12345 (업체)
-  - seeker@test.com / test12345 (구직자)
+  - employer@test.com / test12345 (employer)
+  - seeker@test.com / test12345 (seeker)
 
   ## Important Notes
   1. Run this on a FRESH database (drop existing tables first)
@@ -37,6 +39,7 @@
 CREATE TABLE IF NOT EXISTS profiles (
   id uuid PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
   role text NOT NULL CHECK (role IN ('employer', 'seeker')),
+  plan text NOT NULL DEFAULT 'free' CHECK (plan IN ('free', 'pro')),
   name text NOT NULL DEFAULT '',
   bio text DEFAULT '',
   visa_type text DEFAULT '',
@@ -76,16 +79,20 @@ CREATE TABLE IF NOT EXISTS job_posts (
   employer_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   title text NOT NULL DEFAULT '',
   location text NOT NULL DEFAULT '',
+  category text DEFAULT '' CHECK (category IN ('카페', '식당', '네일숍', '편의점', '기타', '')),
   salary text DEFAULT '',
   work_hours text DEFAULT '',
   description text DEFAULT '',
   status text NOT NULL DEFAULT 'open' CHECK (status IN ('open', 'closed')),
+  require_resume boolean DEFAULT false,
+  custom_questions jsonb DEFAULT '[]',
+  deadline date,
   created_at timestamptz DEFAULT now()
 );
 
 ALTER TABLE job_posts ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Authenticated users can view open or own job posts"
+CREATE POLICY "Anyone can view open job posts"
   ON job_posts FOR SELECT
   TO authenticated
   USING (status = 'open' OR employer_id = auth.uid());
@@ -98,13 +105,13 @@ CREATE POLICY "Employers can insert job posts"
 CREATE POLICY "Employers can update own job posts"
   ON job_posts FOR UPDATE
   TO authenticated
-  USING (employer_id = auth.uid())
-  WITH CHECK (employer_id = auth.uid());
+  USING (auth.uid() = employer_id)
+  WITH CHECK (auth.uid() = employer_id);
 
 CREATE POLICY "Employers can delete own job posts"
   ON job_posts FOR DELETE
   TO authenticated
-  USING (employer_id = auth.uid());
+  USING (auth.uid() = employer_id);
 
 CREATE INDEX IF NOT EXISTS idx_job_posts_employer_id ON job_posts(employer_id);
 CREATE INDEX IF NOT EXISTS idx_job_posts_status ON job_posts(status);
@@ -118,13 +125,14 @@ CREATE TABLE IF NOT EXISTS applications (
   job_post_id uuid NOT NULL REFERENCES job_posts(id) ON DELETE CASCADE,
   seeker_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'accepted', 'rejected')),
-  created_at timestamptz DEFAULT now(),
-  UNIQUE (job_post_id, seeker_id)
+  resume_url text,
+  custom_answers jsonb DEFAULT '[]',
+  created_at timestamptz DEFAULT now()
 );
 
 ALTER TABLE applications ENABLE ROW LEVEL SECURITY;
 
-CREATE POLICY "Seekers and employers can view relevant applications"
+CREATE POLICY "Seekers can view own applications"
   ON applications FOR SELECT
   TO authenticated
   USING (
@@ -191,14 +199,7 @@ CREATE POLICY "Participants can view chat rooms"
 CREATE POLICY "Employers can create chat rooms"
   ON chat_rooms FOR INSERT
   TO authenticated
-  WITH CHECK (
-    auth.uid() = employer_id
-    AND EXISTS (
-      SELECT 1 FROM profiles
-      WHERE profiles.id = auth.uid()
-      AND profiles.role = 'employer'
-    )
-  );
+  WITH CHECK (auth.uid() = employer_id);
 
 CREATE POLICY "Participants can update chat rooms"
   ON chat_rooms FOR UPDATE
@@ -267,6 +268,7 @@ CREATE INDEX IF NOT EXISTS idx_messages_created_at ON messages(created_at);
 CREATE TABLE IF NOT EXISTS reviews (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   chat_room_id uuid NOT NULL REFERENCES chat_rooms(id) ON DELETE CASCADE,
+  application_id uuid REFERENCES applications(id) ON DELETE CASCADE,
   reviewer_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   reviewee_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
   rating integer NOT NULL CHECK (rating >= 1 AND rating <= 5),
@@ -304,6 +306,89 @@ CREATE POLICY "Reviewers can update own reviews"
 CREATE INDEX IF NOT EXISTS idx_reviews_reviewee_id ON reviews(reviewee_id);
 CREATE INDEX IF NOT EXISTS idx_reviews_chat_room_id ON reviews(chat_room_id);
 
+-- ============================================================
+-- 7. RESUMES
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS resumes (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  seeker_id uuid UNIQUE NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  file_url text DEFAULT '',
+  updated_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE resumes ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Seekers can view own resumes"
+  ON resumes FOR SELECT
+  TO authenticated
+  USING (seeker_id = auth.uid());
+
+CREATE POLICY "Employers can view accepted applicant resumes"
+  ON resumes FOR SELECT
+  TO authenticated
+  USING (
+    EXISTS (
+      SELECT 1 FROM applications
+      WHERE applications.seeker_id = resumes.seeker_id
+      AND applications.status = 'accepted'
+      AND EXISTS (
+        SELECT 1 FROM job_posts
+        WHERE job_posts.id = applications.job_post_id
+        AND job_posts.employer_id = auth.uid()
+      )
+    )
+  );
+
+CREATE POLICY "Seekers can insert own resumes"
+  ON resumes FOR INSERT
+  TO authenticated
+  WITH CHECK (seeker_id = auth.uid());
+
+CREATE POLICY "Seekers can update own resumes"
+  ON resumes FOR UPDATE
+  TO authenticated
+  USING (seeker_id = auth.uid())
+  WITH CHECK (seeker_id = auth.uid());
+
+CREATE POLICY "Seekers can delete own resumes"
+  ON resumes FOR DELETE
+  TO authenticated
+  USING (seeker_id = auth.uid());
+
+-- ============================================================
+-- 8. INTERVIEWS
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS interviews (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  application_id uuid UNIQUE NOT NULL REFERENCES applications(id) ON DELETE CASCADE,
+  employer_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  seeker_id uuid NOT NULL REFERENCES profiles(id) ON DELETE CASCADE,
+  proposed_dates jsonb DEFAULT '[]',
+  confirmed_date timestamptz,
+  status text NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'confirmed', 'completed')),
+  created_at timestamptz DEFAULT now()
+);
+
+ALTER TABLE interviews ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY "Participants can view interviews"
+  ON interviews FOR SELECT
+  TO authenticated
+  USING (employer_id = auth.uid() OR seeker_id = auth.uid());
+
+CREATE POLICY "Employers can create interviews"
+  ON interviews FOR INSERT
+  TO authenticated
+  WITH CHECK (employer_id = auth.uid());
+
+CREATE POLICY "Participants can update interviews"
+  ON interviews FOR UPDATE
+  TO authenticated
+  USING (employer_id = auth.uid() OR seeker_id = auth.uid())
+  WITH CHECK (employer_id = auth.uid() OR seeker_id = auth.uid());
+
 
 -- ============================================================
 -- ============================================================
@@ -315,8 +400,6 @@ CREATE INDEX IF NOT EXISTS idx_reviews_chat_room_id ON reviews(chat_room_id);
 -- S1. AUTH USERS (test accounts)
 -- ============================================================
 -- Password for both: test12345
--- We insert directly into auth.users with bcrypt hashes.
--- The $2a$06$ hashes below correspond to "test12345".
 
 INSERT INTO auth.users (
   id, instance_id, aud, role, email, encrypted_password,
@@ -348,7 +431,7 @@ INSERT INTO auth.users (
   )
 ON CONFLICT (id) DO NOTHING;
 
--- Also add identities for the users
+-- Add identities for the users
 INSERT INTO auth.identities (
   id, user_id, provider_id, provider, last_sign_in_at,
   created_at, updated_at, identity_data
@@ -381,15 +464,16 @@ INSERT INTO profiles (id, role, name, bio, visa_type) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
--- S3. JOB_POSTS (sample jobs by employer)
+-- S3. JOB_POSTS
 -- ============================================================
 
-INSERT INTO job_posts (id, employer_id, title, location, salary, work_hours, description, status) VALUES
+INSERT INTO job_posts (id, employer_id, title, location, category, salary, work_hours, description, status) VALUES
   (
     'a1000000-0000-0000-0000-000000000001',
     'e1000000-0000-0000-0000-000000000001',
     '카페 서빙 아르바이트',
     '서울 강남구',
+    '카페',
     '시급 12,000원',
     '평일 10:00-15:00',
     '강남역 근처 카페에서 서빙 아르바이트생을 모집합니다. 친절하신 분 환영!',
@@ -400,6 +484,7 @@ INSERT INTO job_posts (id, employer_id, title, location, salary, work_hours, des
     'e1000000-0000-0000-0000-000000000001',
     '주방 보조 구인',
     '서울 마포구',
+    '식당',
     '시급 15,000원',
     '주 5일 09:00-18:00',
     '한식당 주방 보조를 찾습니다. 기본적인 식재료 손질 가능하신 분 우대.',
@@ -410,6 +495,7 @@ INSERT INTO job_posts (id, employer_id, title, location, salary, work_hours, des
     'e1000000-0000-0000-0000-000000000001',
     '편의점 야간 근무',
     '서울 동대문구',
+    '편의점',
     '시급 11,000원',
     '야간 22:00-06:00',
     '24시간 편의점에서 야간 근무자를 모집합니다. 책임감 있으신 분 환영!',
@@ -418,17 +504,18 @@ INSERT INTO job_posts (id, employer_id, title, location, salary, work_hours, des
   (
     'a1000000-0000-0000-0000-000000000004',
     'e1000000-0000-0000-0000-000000000001',
-    '사무실 청소 아르바이트',
+    '네일숍 보조',
     '서울 송파구',
-    '시급 10,000원',
-    '평일 07:00-09:00',
-    '오피스텔 청소 아르바이트 모집. 깔끔하게 청소하실 분!',
-    'closed'
+    '네일숍',
+    '시급 13,000원',
+    '평일 11:00-19:00',
+    '네일숍에서 보조 스태프를 모집합니다. 관심 있으신 분 지원해주세요!',
+    'open'
   )
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
--- S4. APPLICATIONS (seeker applied to jobs)
+-- S4. APPLICATIONS
 -- ============================================================
 
 INSERT INTO applications (id, job_post_id, seeker_id, status) VALUES
@@ -459,7 +546,7 @@ INSERT INTO applications (id, job_post_id, seeker_id, status) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
--- S5. CHAT_ROOMS (created when application accepted)
+-- S5. CHAT_ROOMS
 -- ============================================================
 
 INSERT INTO chat_rooms (id, job_post_id, employer_id, seeker_id, interview_completed) VALUES
@@ -473,7 +560,7 @@ INSERT INTO chat_rooms (id, job_post_id, employer_id, seeker_id, interview_compl
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
--- S6. MESSAGES (sample conversation)
+-- S6. MESSAGES
 -- ============================================================
 
 INSERT INTO messages (id, chat_room_id, sender_id, content) VALUES
@@ -504,7 +591,7 @@ INSERT INTO messages (id, chat_room_id, sender_id, content) VALUES
 ON CONFLICT (id) DO NOTHING;
 
 -- ============================================================
--- S7. REVIEWS (after interview completed)
+-- S7. REVIEWS
 -- ============================================================
 
 INSERT INTO reviews (id, chat_room_id, reviewer_id, reviewee_id, rating, comment) VALUES
