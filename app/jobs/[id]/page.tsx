@@ -23,7 +23,7 @@ type JobPost = Database['public']['Tables']['job_posts']['Row'] & {
 }
 
 type Application = Database['public']['Tables']['applications']['Row'] & {
-  profiles: { name: string; bio: string; visa_type: string } | null
+  profiles: { name: string; bio: string; visa_type: string; no_show_count: number } | null
 }
 
 type Resume = Database['public']['Tables']['resumes']['Row']
@@ -96,6 +96,10 @@ export default function JobDetailPage() {
   const [answers, setAnswers] = useState<{ [key: string]: string }>({})
   const [applyError, setApplyError] = useState('')
   const [showProModal, setShowProModal] = useState(false)
+  const [showAIDraftModal, setShowAIDraftModal] = useState(false)
+  const [aiDraftMessage, setAiDraftMessage] = useState('')
+  const [aiDraftAppId, setAiDraftAppId] = useState<string | null>(null)
+  const [aiDraftSeekerId, setAiDraftSeekerId] = useState<string | null>(null)
 
   useEffect(() => {
     const fetchJob = async () => {
@@ -152,7 +156,7 @@ export default function JobDetailPage() {
       const fetchApplications = async () => {
         const { data } = await supabase
           .from('applications')
-          .select('*, profiles(name, bio, visa_type)')
+          .select('*, profiles(name, bio, visa_type, no_show_count)')
           .eq('job_post_id', id)
           .order('created_at', { ascending: false })
         setApplications((data as unknown as Application[]) ?? [])
@@ -169,61 +173,100 @@ export default function JobDetailPage() {
     if (!user || !job) return
     setActionLoading(appId)
 
+    if (status === 'accepted') {
+      // For PRO users: show AI draft modal first
+      if (isPro) {
+        const appData = applications.find(a => a.id === appId)
+        const customAnswers = parseCustomAnswers(appData?.custom_answers ?? null)
+        const seekerName = appData?.profiles?.name ?? '지원자'
+        const keySnippet = customAnswers.length > 0
+          ? customAnswers[0].answer.trim().slice(0, 30)
+          : '지원 내용'
+
+        const draft = `안녕하세요 ${seekerName}님! HireVan을 통해 지원해주신 [${job.title}] 공고 검토 후, 경력이 인상 깊어 면접을 제안드리고자 연락드렸습니다. 특히 사전질문에서 작성해주신 "${keySnippet}..." 부분이 저희 방향성과 잘 맞는다고 판단되었습니다. 하단의 면접 조율 스케줄러를 통해 편하신 일정을 선택해주시면 감사하겠습니다!`
+
+        setAiDraftMessage(draft)
+        setAiDraftAppId(appId)
+        setAiDraftSeekerId(seekerId)
+        setShowAIDraftModal(true)
+        setActionLoading(null)
+        return
+      }
+
+      // FREE users: immediate redirect with default message
+      await proceedAcceptance(appId, seekerId, null)
+      return
+    }
+
     await supabase
       .from('applications')
       .update({ status })
       .eq('id', appId)
 
-    if (status === 'accepted') {
-      const appData = applications.find(a => a.id === appId)
-      const { data: existing } = await supabase
+    setApplications(prev =>
+      prev.map(a => (a.id === appId ? { ...a, status } : a))
+    )
+    setActionLoading(null)
+  }
+
+  // Shared acceptance logic
+  const proceedAcceptance = async (appId: string, seekerId: string, customMessage: string | null) => {
+    if (!user || !job) return
+    const appData = applications.find(a => a.id === appId)
+    const { data: existing } = await supabase
+      .from('chat_rooms')
+      .select('id')
+      .eq('job_post_id', job.id)
+      .eq('seeker_id', seekerId)
+      .maybeSingle()
+
+    let chatRoomId: string
+    if (existing?.id) {
+      chatRoomId = existing.id
+    } else {
+      const { data: newRoom, error: roomError } = await supabase
         .from('chat_rooms')
+        .insert({
+          job_post_id: job.id,
+          employer_id: user.id,
+          seeker_id: seekerId,
+        })
         .select('id')
-        .eq('job_post_id', job.id)
-        .eq('seeker_id', seekerId)
-        .maybeSingle()
-
-      let chatRoomId: string
-      if (existing?.id) {
-        chatRoomId = existing.id
-      } else {
-        const { data: newRoom, error: roomError } = await supabase
-          .from('chat_rooms')
-          .insert({
-            job_post_id: job.id,
-            employer_id: user.id,
-            seeker_id: seekerId,
-          })
-          .select('id')
-          .single()
-        if (roomError || !newRoom) {
-          setActionLoading(null)
-          return
-        }
-        chatRoomId = newRoom.id
+        .single()
+      if (roomError || !newRoom) {
+        setActionLoading(null)
+        return
       }
+      chatRoomId = newRoom.id
+    }
 
+    const message = customMessage ?? (() => {
       const resumeUrl = appData?.resume_url ?? '미첨부'
       const customAnswers = parseCustomAnswers(appData?.custom_answers ?? null)
       const qaText = customAnswers.length > 0
         ? '\n' + customAnswers.map(a => `❓ Q: ${a.question}\n➡️ A: ${a.answer}`).join('\n\n')
         : ''
-      const summaryMessage = `📢 지원이 수락되었습니다! 대화를 시작합니다.\n\n📄 이력서 URL: ${resumeUrl}${qaText}`
+      return `📢 지원이 수락되었습니다! 대화를 시작합니다.\n\n📄 이력서 URL: ${resumeUrl}${qaText}`
+    })()
 
-      await supabase.from('messages').insert({
-        chat_room_id: chatRoomId,
-        sender_id: user.id,
-        content: summaryMessage,
-      })
+    await supabase.from('applications').update({ status: 'accepted' }).eq('id', appId)
+    await supabase.from('messages').insert({
+      chat_room_id: chatRoomId,
+      sender_id: user.id,
+      content: message,
+    })
 
-      router.push(`/chat/${chatRoomId}`)
-      return
-    }
+    router.push(`/chat/${chatRoomId}`)
+  }
 
-    setApplications(prev =>
-      prev.map(a => (a.id === appId ? { ...a, status } : a))
-    )
-    setActionLoading(null)
+  const handleSendAIDraft = async () => {
+    if (!aiDraftAppId || !aiDraftSeekerId) return
+    setActionLoading(aiDraftAppId)
+    setShowAIDraftModal(false)
+    await proceedAcceptance(aiDraftAppId, aiDraftSeekerId, aiDraftMessage.trim())
+    setAiDraftMessage('')
+    setAiDraftAppId(null)
+    setAiDraftSeekerId(null)
   }
 
   const handleToggleStatus = async () => {
@@ -514,6 +557,9 @@ export default function JobDetailPage() {
                         {app.profiles?.visa_type && (
                           <p className="text-xs text-gray-400">{app.profiles.visa_type}</p>
                         )}
+                        {(app.profiles?.no_show_count ?? 0) > 0 && (
+                          <p className="text-xs font-semibold text-red-500 mt-1">🚨 노쇼 이력 {app.profiles!.no_show_count}회</p>
+                        )}
                       </div>
                       <StatusBadge status={app.status} />
                     </div>
@@ -601,6 +647,58 @@ export default function JobDetailPage() {
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* ── AI Draft Modal ── */}
+      {showAIDraftModal && (
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 px-3 pb-3 sm:items-center sm:pb-0">
+          <div className="w-full max-w-md rounded-3xl bg-white p-5 shadow-2xl">
+            <div className="mb-5 flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold text-orange-500">AI 면접 제안 초안</p>
+                <h2 className="mt-1 text-xl font-bold text-gray-900">AI가 생성한 초대장을 확인하세요</h2>
+                <p className="mt-1 text-sm text-gray-500">원하는 대로 수정한 뒤 전송할 수 있습니다.</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowAIDraftModal(false)}
+                className="rounded-full bg-gray-100 px-3 py-1.5 text-sm text-gray-500"
+              >
+                닫기
+              </button>
+            </div>
+            <textarea
+              value={aiDraftMessage}
+              onChange={e => setAiDraftMessage(e.target.value)}
+              rows={8}
+              className="w-full rounded-2xl border border-gray-200 px-4 py-3 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-orange-300 resize-none"
+            />
+            <div className="mt-4 flex gap-2">
+              <button
+                onClick={() => {
+                  const appData = aiDraftAppId ? applications.find(a => a.id === aiDraftAppId) : null
+                  const customAnswers = parseCustomAnswers(appData?.custom_answers ?? null)
+                  const seekerName = appData?.profiles?.name ?? '지원자'
+                  const keySnippet = customAnswers.length > 0
+                    ? customAnswers[0].answer.trim().slice(0, 30)
+                    : '지원 내용'
+                  setAiDraftMessage(`안녕하세요 ${seekerName}님! HireVan을 통해 지원해주신 [${job?.title ?? ''}] 공고 검토 후, 경력이 인상 깊어 면접을 제안드리고자 연락드렸습니다. 특히 사전질문에서 작성해주신 "${keySnippet}..." 부분이 저희 방향성과 잘 맞는다고 판단되었습니다. 하단의 면접 조율 스케줄러를 통해 편하신 일정을 선택해주시면 감사하겠습니다!`)
+                }}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-gray-500 border border-gray-200 bg-white hover:bg-gray-50 transition-all active:scale-95"
+              >
+                템플릿 초기화
+              </button>
+              <button
+                onClick={handleSendAIDraft}
+                disabled={!aiDraftMessage.trim()}
+                className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white transition-all active:scale-95 disabled:opacity-60"
+                style={{ backgroundColor: 'var(--brand)' }}
+              >
+                수정 완료 및 전송
+              </button>
+            </div>
+          </div>
         </div>
       )}
 

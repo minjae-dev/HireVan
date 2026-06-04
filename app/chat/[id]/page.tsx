@@ -446,12 +446,17 @@ export default function ChatRoomPage() {
             const confirmed = proposal.status === 'confirmed'
             const declined = proposal.status === 'declined'
             const pending = proposal.status === 'pending'
+            const noShow = proposal.status === 'no_show'
+            const expired = confirmed && isInterviewExpired(proposal)
             const isSeeker = room.seeker_id === user?.id
+            const showReport = isEmployer && confirmed && expired && !noShow
 
             return (
               <div key={msg.id} className="flex justify-center">
                 <div className={`w-full max-w-sm rounded-2xl border p-4 ${
-                  confirmed
+                  noShow
+                    ? 'bg-red-50 border-red-200'
+                    : confirmed
                     ? 'bg-green-50 border-green-200'
                     : declined
                     ? 'bg-gray-50 border-gray-200'
@@ -463,6 +468,7 @@ export default function ChatRoomPage() {
                     {pending && <span className="ml-auto text-xs font-semibold text-orange-600 bg-orange-100 px-2 py-0.5 rounded-full">대기 중</span>}
                     {confirmed && <span className="ml-auto text-xs font-semibold text-green-600 bg-green-100 px-2 py-0.5 rounded-full">확정됨</span>}
                     {declined && <span className="ml-auto text-xs font-semibold text-gray-500 bg-gray-200 px-2 py-0.5 rounded-full">거절됨</span>}
+                    {noShow && <span className="ml-auto text-xs font-semibold text-red-600 bg-red-100 px-2 py-0.5 rounded-full">노쇼</span>}
                   </div>
 
                   <div className="space-y-1.5 text-sm text-gray-700">
@@ -498,16 +504,69 @@ export default function ChatRoomPage() {
                     </div>
                   )}
 
-                  {!pending && (
+                  {!pending && !noShow && (
                     <p className="mt-3 text-xs text-gray-400 text-center">
                       {confirmed ? '✅ 면접 일정이 확정되었습니다.' : '❌ 면접 제안이 거절되었습니다.'}
                     </p>
+                  )}
+
+                  {noShow && (
+                    <p className="mt-3 text-xs text-red-500 text-center font-semibold">🚨 노쇼(No-Show) 신고 완료</p>
+                  )}
+
+                  {showReport && (
+                    <div className="mt-4 rounded-xl bg-red-50 border border-red-100 p-3">
+                      <p className="text-xs font-semibold text-red-700 mb-2">면접이 예정대로 진행되었나요?</p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            // Mark interview as completed instead
+                            handleCompleteInterview()
+                          }}
+                          className="flex-1 py-2 rounded-xl text-xs font-bold text-green-700 border border-green-200 bg-white hover:bg-green-50 transition-all active:scale-95"
+                        >
+                          네, 진행됨
+                        </button>
+                        <button
+                          onClick={() => setShowNoShowConfirm(msg.id)}
+                          className="flex-1 py-2 rounded-xl text-xs font-bold text-white transition-all active:scale-95"
+                          style={{ backgroundColor: '#ef4444' }}
+                        >
+                          노쇼 신고하기
+                        </button>
+                      </div>
+                    </div>
                   )}
 
                   <p className="mt-2 text-xs text-gray-300 text-right">
                     {new Date(msg.created_at).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
                   </p>
                 </div>
+
+                {/* No-Show confirmation popover */}
+                {showNoShowConfirm === msg.id && (
+                  <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40" onClick={() => setShowNoShowConfirm(null)}>
+                    <div className="bg-white rounded-2xl p-5 mx-3 max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+                      <h3 className="font-bold text-gray-900 text-sm mb-2">🚨 노쇼 신고 확인</h3>
+                      <p className="text-xs text-gray-500 mb-4">해당 지원자가 면접에 불참한 것으로 신고하시겠습니까?<br/>신고 시 구직자 프로필에 노쇼 이력이 기록됩니다.</p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => handleReportNoShow(msg)}
+                          className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white transition-all active:scale-95"
+                          style={{ backgroundColor: '#ef4444' }}
+                        >
+                          네, 신고합니다
+                        </button>
+                        <button
+                          onClick={() => setShowNoShowConfirm(null)}
+                          className="flex-1 py-2.5 rounded-xl text-xs font-bold text-gray-500 border border-gray-200 bg-white hover:bg-gray-50 transition-all active:scale-95"
+                        >
+                          취소
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             )
           }
