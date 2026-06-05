@@ -1,7 +1,7 @@
 'use client'
 
-import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useEffect, useState } from 'react'
 
 type Review = {
   id: string
@@ -9,7 +9,6 @@ type Review = {
   comment: string
   created_at: string
   reviewer: { name: string; role: string } | null
-  reviewee: { name: string; role: string } | null
 }
 
 export default function ReviewsPage() {
@@ -17,19 +16,29 @@ export default function ReviewsPage() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const fetchReviews = async () => {
+    const fetchMyReviews = async () => {
+      // 1. 현재 로그인한 유저 정보 가져오기
+      const { data: { user } } = await supabase.auth.getUser()
+      
+      if (!user) {
+        setLoading(false)
+        return
+      }
+
+      // 2. 내 ID(user.id)를 조건으로 리뷰 필터링
       const { data } = await supabase
         .from('reviews')
         .select(`
-          *,
-          reviewer:profiles!reviews_reviewer_id_fkey(name, role),
-          reviewee:profiles!reviews_reviewee_id_fkey(name, role)
+          id, rating, comment, created_at,
+          reviewer:profiles!reviews_reviewer_id_fkey(name, role)
         `)
+        .eq('reviewee_id', user.id) // 내 ID와 일치하는 리뷰만 조회
         .order('created_at', { ascending: false })
+        
       setReviews((data as unknown as Review[]) ?? [])
       setLoading(false)
     }
-    fetchReviews()
+    fetchMyReviews()
   }, [])
 
   return (

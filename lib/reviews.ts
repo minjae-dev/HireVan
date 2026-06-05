@@ -82,7 +82,7 @@ export interface CreateReviewInput {
 export async function createReview(input: CreateReviewInput): Promise<void> {
   const { error } = await supabase
     .from('reviews')
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     .insert({
       chat_room_id: input.chatRoomId,
       reviewer_id: input.reviewerId,
