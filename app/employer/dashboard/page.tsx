@@ -503,10 +503,10 @@ function BillingSummary({
   onUpgraded,
   onRequestUpgrade,
 }: BillingSummaryProps) {
+  const { session } = useAuth()
   const [openingPortal, setOpeningPortal] = useState(false)
   const [portalError, setPortalError] = useState<string | null>(null)
 
-  // ?upgrade=success 쿼리 → billing 새로고침
   useEffect(() => {
     if (typeof window === 'undefined') return
     const url = new URL(window.location.href)
@@ -521,13 +521,23 @@ function BillingSummary({
     setOpeningPortal(true)
     setPortalError(null)
     try {
-      const res = await fetch('/api/stripe/portal', { method: 'POST' })
+      const accessToken = session?.access_token
+      if (!accessToken) {
+        throw new Error('로그인이 필요해요. 다시 로그인한 후 시도해주세요.')
+      }
+      const res = await fetch('/api/stripe/portal', {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      })
       const data = (await res.json().catch(() => ({}))) as { url?: string; error?: string }
       if (!res.ok || !data.url) {
         throw new Error(data.error ?? 'Failed to open billing portal')
       }
       window.location.href = data.url
     } catch (err) {
+      console.log(err)
       const msg = err instanceof Error ? err.message : 'Unknown error'
       setPortalError(msg)
       setOpeningPortal(false)
@@ -544,40 +554,88 @@ function BillingSummary({
 
   // PRO 사용자
   if (isPro) {
-    const renewsAt = billing?.subscription_ends_at
+    const formattedEndDate = billing?.subscription_ends_at
       ? new Date(billing.subscription_ends_at).toLocaleDateString('ko-KR')
       : null
+    
+    
+    const isScheduledToCancel = billing?.subscription_ends_at ? true : false;
+
     return (
-      <div className="rounded-3xl border-2 border-orange-200 bg-gradient-to-br from-orange-50 to-pink-50 p-6">
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-wider text-orange-500">
-              HireVan PRO
-            </p>
-            <h2 className="mt-1 text-lg font-extrabold text-gray-900">
-              🎉 PRO 플랜이 활성화되어 있어요
-            </h2>
-            <p className="mt-1 text-sm text-gray-600">
-              모든 구직자 프로필을 무제한으로 열람할 수 있습니다.
-            </p>
-            {renewsAt && (
-              <p className="mt-2 text-xs text-gray-500">
-                다음 결제일: <strong>{renewsAt}</strong>
+      <div className={`rounded-3xl border-2 p-6 ${
+        isScheduledToCancel
+          ? 'border-yellow-300 bg-gradient-to-br from-yellow-50 to-orange-50'
+          : 'border-orange-200 bg-gradient-to-br from-orange-50 to-pink-50'
+      }`}>
+        <div className="flex flex-col gap-4">
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-xs font-bold uppercase tracking-wider text-orange-500">
+                HireVan PRO
               </p>
+              {isScheduledToCancel ? (
+                <>
+                  <h2 className="mt-1 text-lg font-extrabold text-gray-900">
+                    ⏳ 구독이 종료 예정이에요
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-600">
+                    {formattedEndDate ? (
+                      <>서비스 이용 가능 기간: <strong>{formattedEndDate}</strong>까지</>
+                    ) : (
+                      '구독이 곧 종료됩니다.'
+                    )}
+                  </p>
+                  <p className="mt-1 text-xs text-yellow-700">
+                    해당일 이후 FREE 플랜으로 전환됩니다. 계속 PRO를 이용하려면 다시 구독해주세요.
+                  </p>
+                </>
+              ) : (
+                <>
+                  <h2 className="mt-1 text-lg font-extrabold text-gray-900">
+                    🎉 PRO 플랜이 활성화되어 있어요
+                  </h2>
+                  <p className="mt-1 text-sm text-gray-600">
+                    모든 구직자 프로필을 무제한으로 열람할 수 있습니다.
+                  </p>
+                  {formattedEndDate && (
+                    <p className="mt-2 text-xs text-gray-500">
+                      다음 결제일: <strong>{formattedEndDate}</strong>
+                    </p>
+                  )}
+                </>
+              )}
+            </div>
+            {isScheduledToCancel ? (
+              <button
+                type="button"
+                onClick={onRequestUpgrade}
+                className="flex-shrink-0 cursor-pointer rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-4 py-2 text-xs font-extrabold text-white shadow-md transition-all active:scale-95"
+              >
+                🔄 다시 구독하기
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={openBillingPortal}
+                disabled={openingPortal}
+                className="flex-shrink-0 rounded-full border border-orange-300 bg-white px-4 py-2 text-xs font-bold text-orange-600 transition-all active:scale-95 disabled:opacity-60"
+              >
+                {openingPortal ? '이동 중...' : '구독 관리'}
+              </button>
             )}
           </div>
-          <button
-            type="button"
-            onClick={openBillingPortal}
-            disabled={openingPortal}
-            className="flex-shrink-0 rounded-full border border-orange-300 bg-white px-4 py-2 text-xs font-bold text-orange-600 transition-all active:scale-95 disabled:opacity-60"
-          >
-            {openingPortal ? '이동 중...' : '구독 관리'}
-          </button>
+          {isScheduledToCancel && (
+            <div className="rounded-xl border border-yellow-200 bg-white/60 px-4 py-3">
+              <p className="text-xs font-medium text-gray-700">
+                아직 <strong>{formattedEndDate || '결제 기간'}</strong>까지 모든 PRO 기능을 이용할 수 있어요.
+                놓치지 않도록 지금 바로 다시 구독해보세요!
+              </p>
+            </div>
+          )}
+          {portalError && (
+            <p className="rounded-xl bg-red-50 px-4 py-2 text-xs text-red-600">{portalError}</p>
+          )}
         </div>
-        {portalError && (
-          <p className="mt-3 rounded-xl bg-red-50 px-4 py-2 text-xs text-red-600">{portalError}</p>
-        )}
       </div>
     )
   }

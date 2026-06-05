@@ -187,6 +187,7 @@ async function handleCheckoutCompleted(
       stripe_customer_id: customerId,
       stripe_subscription_id: subscriptionId,
       subscription_ends_at: subscriptionEndsAt,
+      cancel_at_period_end: false,
       grace_period_active: false,
       grace_period_ends_at: null,
       last_payment_failed_at: null,
@@ -241,6 +242,7 @@ async function handleInvoicePaymentSucceeded(
     .update({
       plan: 'pro',
       pro_subscriber: true,
+      cancel_at_period_end: false,
       grace_period_active: false,
       grace_period_ends_at: null,
       last_payment_failed_at: null,
@@ -343,6 +345,9 @@ async function handleSubscriptionUpdated(
   // paused / incomplete_expired / canceled → canceled 이벤트에서 처리
   const activeStatuses: Stripe.Subscription.Status[] = ['active', 'trialing']
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const cancelAtPeriodEnd = (subscription as any).cancel_at_period_end ?? false
+
   if (activeStatuses.includes(subscription.status)) {
     const { error } = await supabase
       .from('profiles')
@@ -351,6 +356,7 @@ async function handleSubscriptionUpdated(
         pro_subscriber: true,
         stripe_subscription_id: subscription.id,
         subscription_ends_at: subscriptionEndsAt,
+        cancel_at_period_end: cancelAtPeriodEnd,
         grace_period_active: false,
         grace_period_ends_at: null,
         last_payment_failed_at: null,
@@ -360,7 +366,8 @@ async function handleSubscriptionUpdated(
     if (error) {
       throw new Error(`Failed to sync active sub for ${userId}: ${error.message}`)
     }
-    console.log(`[stripe/webhook] 🔄 sub.updated status=${subscription.status} → PRO for ${userId}`)
+    const cancelNote = cancelAtPeriodEnd ? ' (구독 종료 예정)' : ''
+    console.log(`[stripe/webhook] 🔄 sub.updated status=${subscription.status}${cancelNote} → PRO for ${userId}`)
   } else {
     // past_due / unpaid / paused 등은 결제 실패 핸들러에 위임
     console.log(`[stripe/webhook] ℹ️  sub.updated status=${subscription.status} (no-op, awaiting invoice.* events) for ${userId}`)

@@ -44,9 +44,21 @@ export default function Navbar() {
               <>
                 <Link
                   href="/jobs"
-                  className={`text-sm font-medium ${pathname.startsWith('/jobs') && !pathname.startsWith('/employer') ? 'text-orange-500' : 'text-gray-600'}`}
+                  className={`text-sm font-medium ${
+                    pathname.startsWith('/jobs') && !pathname.startsWith('/employer')
+                      ? 'text-orange-500'
+                      : 'text-gray-600'
+                  }`}
                 >
                   구인글
+                </Link>
+                <Link
+                  href="/seeker/dashboard"
+                  className={`text-sm font-medium ${
+                    pathname.startsWith('/seeker/dashboard') ? 'text-orange-500' : 'text-gray-600'
+                  }`}
+                >
+                  맞춤공고
                 </Link>
                 <Link
                   href="/chat"
@@ -68,12 +80,16 @@ export default function Navbar() {
             >
               내 정보
             </Link>
+            {profile?.role === 'employer' && (
               <Link
-              href="/employer/dashboard"
-              className={`text-sm font-medium ${pathname === '/profile' ? 'text-orange-500' : 'text-gray-600'}`}
-            >
-              대쉬보드
-            </Link>
+                href="/employer/dashboard"
+                className={`text-sm font-medium ${
+                  pathname.startsWith('/employer/dashboard') ? 'text-orange-500' : 'text-gray-600'
+                }`}
+              >
+                대쉬보드
+              </Link>
+            )}
             <button
               onClick={handleSignOut}
               className="text-sm text-gray-400 hover:text-gray-600"

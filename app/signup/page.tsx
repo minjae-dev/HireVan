@@ -17,6 +17,9 @@ export default function SignupPage() {
   const [name, setName] = useState('')
   const [role, setRole] = useState<Role | null>(null)
   const [visaType, setVisaType] = useState('')
+  const [visaExpiryDate, setVisaExpiryDate] = useState('')
+  const [hasSir, setHasSir] = useState(false)
+  const [hasFoodsafe, setHasFoodsafe] = useState(false)
   const [bio, setBio] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
@@ -46,13 +49,22 @@ export default function SignupPage() {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const { error: profileError } = await (supabase as any).from('profiles').insert({
+    const profilePayload: Record<string, unknown> = {
       id: data.user.id,
       role,
       name,
       bio,
       visa_type: visaType,
-    })
+    }
+
+    // 구직자 추가 정보
+    if (role === 'seeker') {
+      profilePayload.visa_expiry_date = visaExpiryDate || null
+      profilePayload.has_sir = hasSir
+      profilePayload.has_foodsafe = hasFoodsafe
+    }
+
+    const { error: profileError } = await (supabase as any).from('profiles').insert(profilePayload)
 
     if (profileError) {
       setError('프로필 생성에 실패했습니다. 다시 시도해주세요.')
@@ -175,21 +187,64 @@ export default function SignupPage() {
               </div>
 
               {role === 'seeker' && (
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    비자 종류
-                  </label>
-                  <select
-                    value={visaType}
-                    onChange={e => setVisaType(e.target.value)}
-                    className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent bg-white"
-                  >
-                    <option value="">선택해주세요</option>
-                    {VISA_OPTIONS.map(v => (
-                      <option key={v} value={v}>{v}</option>
-                    ))}
-                  </select>
-                </div>
+                <>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      비자 종류
+                    </label>
+                    <select
+                      value={visaType}
+                      onChange={e => { setVisaType(e.target.value); if (e.target.value === '영주권/시민권') setVisaExpiryDate('') }}
+                      className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent bg-white"
+                    >
+                      <option value="">선택해주세요</option>
+                      {VISA_OPTIONS.map(v => (
+                        <option key={v} value={v}>{v}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {visaType && visaType !== '영주권/시민권' && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                        비자 만료일 <span className="text-red-500">*</span>
+                      </label>
+                      <input
+                        type="date"
+                        value={visaExpiryDate}
+                        onChange={e => setVisaExpiryDate(e.target.value)}
+                        required
+                        className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent"
+                      />
+                    </div>
+                  )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      보유 자격증 (해당 항목을 선택해주세요)
+                    </label>
+                    <div className="flex gap-4">
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={hasSir}
+                          onChange={e => setHasSir(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-400"
+                        />
+                        <span className="text-sm text-gray-700">Serving It Right (SIR)</span>
+                      </label>
+                      <label className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={hasFoodsafe}
+                          onChange={e => setHasFoodsafe(e.target.checked)}
+                          className="h-4 w-4 rounded border-gray-300 text-orange-500 focus:ring-orange-400"
+                        />
+                        <span className="text-sm text-gray-700">FoodSafe</span>
+                      </label>
+                    </div>
+                  </div>
+                </>
               )}
 
               <div>

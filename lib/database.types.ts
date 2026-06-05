@@ -38,6 +38,52 @@ export type AvailabilityMatrix = Partial<{
   sunday: ShiftSlot[]
 }>
 
+/**
+ * 구직자의 희망 구직 조건 (seeker_preferences 테이블)
+ */
+export interface SeekerPreferences {
+  id: string
+  seeker_id: string
+  desired_categories: string[]
+  desired_locations: string[]
+  desired_salary_min: number | null
+  desired_salary_max: number | null
+  desired_visa_types: string[]
+  desired_certificates: string[]
+  notifications_enabled: boolean
+  created_at: string
+  updated_at: string
+}
+
+/**
+ * 구직자-공고 매칭 결과 (job_to_seeker_matches 테이블)
+ */
+export interface JobToSeekerMatch {
+  id: string
+  seeker_id: string
+  job_post_id: string
+  match_score: number
+  matched_reasons: string[]
+  notified: boolean
+  viewed: boolean
+  created_at: string
+}
+
+/**
+ * match_jobs_to_seeker RPC 반환 결과
+ */
+export interface JobMatchResult {
+  job_id: string
+  title: string
+  location: string
+  category: string
+  salary: string
+  employer_name: string
+  match_score: number
+  matched_reasons: string[]
+}
+
+/**
 export type ShiftSlot = 'morning' | 'afternoon' | 'evening' | 'night'
 export type Weekday = keyof AvailabilityMatrix
 
@@ -51,6 +97,7 @@ export interface EmployerBillingStatus {
   pro_subscriber?: boolean
   credit_count?: number
   subscription_ends_at?: string | null
+  cancel_at_period_end?: boolean
   grace_period_active?: boolean
   grace_period_ends_at?: string | null
   last_payment_failed_at?: string | null
@@ -125,6 +172,7 @@ export interface AppNotification {
   id: string
   user_id: string
   type:
+    | 'job_match'
     | 'seeker_match'
     | 'payment_failed'
     | 'subscription_canceled'
@@ -168,6 +216,7 @@ export interface Database {
           // Seeker premium metadata
           visa_status: VisaStatus | null
           visa_expiry: string | null
+          visa_expiry_date: string | null
           neighborhood: string | null
           has_sir: boolean
           has_foodsafe: boolean
@@ -195,6 +244,7 @@ export interface Database {
           welcome_credit_granted?: boolean
           visa_status?: VisaStatus | null
           visa_expiry?: string | null
+          visa_expiry_date?: string | null
           neighborhood?: string | null
           has_sir?: boolean
           has_foodsafe?: boolean
@@ -222,6 +272,7 @@ export interface Database {
           welcome_credit_granted?: boolean
           visa_status?: VisaStatus | null
           visa_expiry?: string | null
+          visa_expiry_date?: string | null
           neighborhood?: string | null
           has_sir?: boolean
           has_foodsafe?: boolean
@@ -525,6 +576,81 @@ export interface Database {
         }
         Relationships: []
       }
+      seeker_preferences: {
+        Row: {
+          id: string
+          seeker_id: string
+          desired_categories: string[]
+          desired_locations: string[]
+          desired_salary_min: number | null
+          desired_salary_max: number | null
+          desired_visa_types: string[]
+          desired_certificates: string[]
+          notifications_enabled: boolean
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          seeker_id: string
+          desired_categories?: string[]
+          desired_locations?: string[]
+          desired_salary_min?: number | null
+          desired_salary_max?: number | null
+          desired_visa_types?: string[]
+          desired_certificates?: string[]
+          notifications_enabled?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          seeker_id?: string
+          desired_categories?: string[]
+          desired_locations?: string[]
+          desired_salary_min?: number | null
+          desired_salary_max?: number | null
+          desired_visa_types?: string[]
+          desired_certificates?: string[]
+          notifications_enabled?: boolean
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      job_to_seeker_matches: {
+        Row: {
+          id: string
+          seeker_id: string
+          job_post_id: string
+          match_score: number
+          matched_reasons: string[]
+          notified: boolean
+          viewed: boolean
+          created_at: string
+        }
+        Insert: {
+          id?: string
+          seeker_id: string
+          job_post_id: string
+          match_score?: number
+          matched_reasons?: string[]
+          notified?: boolean
+          viewed?: boolean
+          created_at?: string
+        }
+        Update: {
+          id?: string
+          seeker_id?: string
+          job_post_id?: string
+          match_score?: number
+          matched_reasons?: string[]
+          notified?: boolean
+          viewed?: boolean
+          created_at?: string
+        }
+        Relationships: []
+      }
       notifications: {
         Row: {
           id: string
@@ -604,6 +730,14 @@ export interface Database {
       match_seekers_to_job: {
         Args: { p_job_id: string }
         Returns: SeekerMatch[]
+      }
+      match_jobs_to_seeker: {
+        Args: { p_seeker_id: string; p_limit?: number }
+        Returns: JobMatchResult[]
+      }
+      notify_new_job_matches: {
+        Args: { p_job_id: string }
+        Returns: number
       }
       expire_grace_periods: {
         Args: Record<string, never>
