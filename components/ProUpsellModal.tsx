@@ -1,7 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
+import { useEffect, useState } from 'react'
 
 interface ProUpsellModalProps {
   open: boolean
@@ -100,9 +101,28 @@ export default function ProUpsellModal({
     setSubmitting(true)
     setError(null)
     try {
+      // 1) Supabase 세션의 access_token 을 헤더로 동봉한다.
+      //    서버 라우트는 Authorization: Bearer 헤더 또는 sb-* 쿠키 양쪽을
+      //    모두 지원하지만, supabase-js 의 기본 storage 가 localStorage 이므로
+      //    명시적으로 토큰을 전달해 401 Unauthorized 를 방지한다.
+      const { data: sessionData, error: sessionError } = await supabase.auth.getSession()
+      const accessToken = sessionData?.session?.access_token
+
+      if (sessionError) {
+        throw new Error(`세션 확인 실패: ${sessionError.message}`)
+      }
+      if (!accessToken) {
+        throw new Error('로그인이 필요해요. 다시 로그인한 후 시도해주세요.')
+      }
+
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${accessToken}`,
+      }
+
       const response = await fetch('/api/stripe/checkout', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({ returnTo }),
       })
 

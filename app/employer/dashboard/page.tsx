@@ -803,15 +803,39 @@ function PreScreeningCard({
   }
 
   // -------- PRO 사용자: 실제 편집 가능한 폼 --------
+  // PRO 가드 헬퍼: FREE 사용자가 편집 컨트롤을 만지려 하면
+  //   1) 상태 토글을 막고
+  //   2) 즉시 업셀 모달을 띄운다.
+  // 카드 전체가 블러 처리되지만, 키보드 탭/SSR 상태 등으로
+  // 편집 영역이 잠깐 노출되는 경우를 막기 위한 방어 로직.
   const handleAddQuestion = () => {
+    if (!isPro) {
+      onRequireUpsell()
+      return
+    }
     if (questions.length >= MAX_QUESTIONS_PRO) return
     setQuestions(prev => [...prev, ''])
   }
   const handleQuestionChange = (idx: number, value: string) => {
+    if (!isPro) {
+      onRequireUpsell()
+      return
+    }
     setQuestions(prev => prev.map((q, i) => (i === idx ? value : q)))
   }
   const handleRemoveQuestion = (idx: number) => {
+    if (!isPro) {
+      onRequireUpsell()
+      return
+    }
     setQuestions(prev => prev.filter((_, i) => i !== idx))
+  }
+  const handleToggleRequireResume = () => {
+    if (!isPro) {
+      onRequireUpsell()
+      return
+    }
+    setRequireResume(prev => !prev)
   }
 
   const handleSave = async () => {
@@ -848,10 +872,13 @@ function PreScreeningCard({
     <section className="rounded-3xl border-2 border-orange-200 bg-gradient-to-br from-orange-50/60 to-pink-50/40 p-6">
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
-          <div className="mb-1 flex items-center gap-2">
+          <div className="mb-1 flex flex-wrap items-center gap-2">
             <h2 className="text-lg font-bold text-gray-900">📄 사전 질문 & 필수 서류</h2>
             <span className="rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-2 py-0.5 text-[10px] font-extrabold tracking-wider text-white">
-              PRO
+              ✨PRO
+            </span>
+            <span className="rounded-full border border-orange-200 bg-white px-2 py-0.5 text-[10px] font-bold text-orange-600">
+              지원자 필터링 조건 설정
             </span>
           </div>
           <p className="text-xs text-gray-500">
@@ -897,15 +924,25 @@ function PreScreeningCard({
             적용 대상: <span className="text-gray-800">{targetJob.title}</span>
           </p>
 
-          {/* 이력서 필수 토글 */}
+          {/* 이력서 필수 토글 (✨PRO) */}
           <button
             type="button"
-            onClick={() => setRequireResume(prev => !prev)}
-            className="flex w-full items-center justify-between rounded-2xl border border-gray-100 bg-white px-4 py-3 text-left transition-all active:scale-[0.99]"
+            onClick={handleToggleRequireResume}
+            disabled={!isPro}
+            aria-disabled={!isPro}
             aria-pressed={requireResume}
+            className={`flex w-full items-center justify-between rounded-2xl border border-gray-100 bg-white px-4 py-3 text-left transition-all active:scale-[0.99] ${
+              isPro ? '' : 'cursor-not-allowed opacity-60'
+            }`}
+            title={isPro ? undefined : 'PRO 플랜에서 사용 가능'}
           >
             <div>
-              <p className="text-sm font-semibold text-gray-900">📎 이력서 첨부 필수</p>
+              <p className="text-sm font-semibold text-gray-900">
+                📎 이력서 첨부 필수
+                <span className="ml-1.5 rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-1.5 py-0.5 align-middle text-[9px] font-extrabold tracking-wider text-white">
+                  PRO
+                </span>
+              </p>
               <p className="mt-0.5 text-xs text-gray-400">
                 지원자가 이력서를 함께 제출해야 지원이 완료됩니다.
               </p>
@@ -935,8 +972,10 @@ function PreScreeningCard({
               <button
                 type="button"
                 onClick={handleAddQuestion}
-                disabled={questions.length >= MAX_QUESTIONS_PRO}
-                className="flex-shrink-0 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-bold text-orange-600 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
+                disabled={!isPro || questions.length >= MAX_QUESTIONS_PRO}
+                aria-disabled={!isPro}
+                title={isPro ? undefined : 'PRO 플랜에서 사용 가능'}
+                className="flex-shrink-0 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-bold text-orange-600 disabled:cursor-not-allowed disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
               >
                 + 추가
               </button>
@@ -954,14 +993,18 @@ function PreScreeningCard({
                       type="text"
                       value={question}
                       onChange={event => handleQuestionChange(index, event.target.value)}
+                      disabled={!isPro}
+                      aria-disabled={!isPro}
                       maxLength={120}
                       placeholder={`질문 ${index + 1}. 예: 가능한 근무 시작일은 언제인가요?`}
-                      className="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-orange-300"
+                      className="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
                     />
                     <button
                       type="button"
                       onClick={() => handleRemoveQuestion(index)}
-                      className="h-[42px] w-[42px] flex-shrink-0 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-400 transition-colors hover:text-red-500"
+                      disabled={!isPro}
+                      aria-disabled={!isPro}
+                      className="h-[42px] w-[42px] flex-shrink-0 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-400 transition-colors hover:text-red-500 disabled:cursor-not-allowed disabled:opacity-50"
                       aria-label={`질문 ${index + 1} 삭제`}
                     >
                       ×

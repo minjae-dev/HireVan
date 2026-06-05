@@ -30,6 +30,7 @@ interface BlurredSeekerCardProps {
   creditsRemaining?: number
   /** 사용 가능한가 (false면 카드 비활성화, CTA 숨김) */
   interactive?: boolean
+  isProEmployer: boolean; // ★ 추가
 }
 
 /**
@@ -47,6 +48,7 @@ export default function BlurredSeekerCard({
   canViewForFree,
   creditsRemaining,
   interactive = true,
+  isProEmployer, // ★ 추가
 }: BlurredSeekerCardProps) {
   const displayName = seeker.name || '익명 구직자'
   const displayAvatar = seeker.avatar_url
@@ -160,18 +162,24 @@ export default function BlurredSeekerCard({
         </div>
 
         {/* Blur overlay (CTA) — canViewForFree=false 일 때만 */}
-        {!canViewForFree && interactive && (
-          <button
-            type="button"
-            onClick={onUnlockClick}
-            className="absolute inset-0 flex items-center justify-center bg-gradient-to-t from-white/85 via-white/40 to-transparent"
-            aria-label="프로필 상세 열람 (PRO 필요)"
-          >
-            <span className="rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-5 py-2.5 text-sm font-bold text-white shadow-lg transition-transform group-hover:scale-105">
-              🔒 1 크레딧으로 상세 보기
-            </span>
-          </button>
+{!canViewForFree && interactive && (
+      <div 
+        onClick={(e) => {
+          e.stopPropagation();
+          onUnlockClick?.();
+        }} 
+        className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 backdrop-blur-md z-10 cursor-pointer rounded-xl"
+      >
+        <p className="text-white font-semibold text-base">
+          {isProEmployer ? '프로필 상세 열람 (PRO 무료)' : '프로필 상세 열람'}
+        </p>
+        {!isProEmployer && (
+          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-amber-500 text-white mt-2">
+            ⚡ 1 크레딧 소모
+          </span>
         )}
+      </div>
+    )}
       </div>
     </div>
   )

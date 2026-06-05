@@ -1,10 +1,10 @@
 'use client'
 
-import { useState } from 'react'
-import { useRouter } from 'next/navigation'
-import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { supabase } from '@/lib/supabase'
+import Link from 'next/link'
+import { useRouter } from 'next/navigation'
+import { useState } from 'react'
 
 const LOCATION_OPTIONS = ['다운타운', '버나비', '서리', '코퀴틀람', '리치몬드', '노스밴쿠버', '기타']
 const JOB_TYPE_OPTIONS = ['카페', '식당', '네일숍', '편의점', '소매점', '청소용역', '배송', '기타']
@@ -53,7 +53,11 @@ export default function EmployerNewJobPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-
+    // 유저가  프로플랜 인지 확인하는 작업
+    if(requireResume && !isPro || questions.length > MAX_QUESTIONS_FREE && !isPro) {
+      setError(`PRO 플랜으로 업그레이드해야만 이용가능합니다.`)
+      return
+    }
     // 유효성 검사
     if (!formData.title.trim()) {
       setError('공고 제목을 입력해주세요.')
@@ -72,6 +76,9 @@ export default function EmployerNewJobPage() {
       setError('사용자 정보가 없습니다.')
       return
     }
+   
+
+
 
     const customQuestions = questions
       .map(question => question.trim())
