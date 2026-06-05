@@ -52,7 +52,7 @@ export async function POST(request: NextRequest) {
     .from('profiles')
     .select('stripe_customer_id')
     .eq('id', user.id)
-    .maybeSingle()
+    .maybeSingle() as { data: { stripe_customer_id: string | null } | null }
 
   if (!profile?.stripe_customer_id) {
     return NextResponse.json(

@@ -141,7 +141,8 @@ export default function ProfilePage() {
 
     const { data: publicUrlData } = supabase.storage.from('resumes').getPublicUrl(filePath)
     const updatedAt = new Date().toISOString()
-    const { data, error: upsertError } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error: upsertError } = await (supabase as any)
       .from('resumes')
       .upsert(
         {
@@ -171,7 +172,8 @@ export default function ProfilePage() {
     setError('')
     setSuccess(false)
 
-    const { error } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any)
       .from('profiles')
       .update({ name, bio, visa_type: visaType })
       .eq('id', user.id)

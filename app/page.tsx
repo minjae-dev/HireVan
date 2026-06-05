@@ -59,11 +59,12 @@ export default function ChatListPage() {
             .order('created_at', { ascending: false })
             .limit(1)
             .maybeSingle()
+          const msg = lastMsg as unknown as { content: string; created_at: string } | null
 
           return {
             ...room,
-            last_message: lastMsg?.content ?? null,
-            last_message_at: lastMsg?.created_at ?? null,
+            last_message: msg?.content ?? null,
+            last_message_at: msg?.created_at ?? null,
           }
         })
       )

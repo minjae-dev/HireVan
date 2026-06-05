@@ -7,6 +7,9 @@ import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import type { Database } from '@/lib/database.types'
 
+const MAX_QUESTIONS_FREE = 3
+const MAX_QUESTIONS_PRO = 5
+
 type CustomAnswer = {
   id: string
   question: string
@@ -15,19 +18,21 @@ type CustomAnswer = {
 
 type JobPost = Database['public']['Tables']['job_posts']['Row']
 type Application = Database['public']['Tables']['applications']['Row'] & {
-  profiles: { name: string; bio: string; visa_type: string; no_show_count: number } | null
+  profiles: { name: string; bio: string; visa_type: string } | null
   chat_room_id: string | null
 }
 
 export default function EmployerJobDetailPage() {
   const { id } = useParams<{ id: string }>()
-  const { user } = useAuth()
+  const { user, profile } = useAuth()
   const router = useRouter()
 
   const [job, setJob] = useState<JobPost | null>(null)
   const [applications, setApplications] = useState<Application[]>([])
   const [loading, setLoading] = useState(true)
   const [isEditing, setIsEditing] = useState(false)
+
+  // Basic edit fields
   const [editForm, setEditForm] = useState({
     title: '',
     location: '',
@@ -35,67 +40,82 @@ export default function EmployerJobDetailPage() {
     work_hours: '',
     description: '',
   })
+
+  // PRO filtering fields (edit mode)
+  const [editRequireResume, setEditRequireResume] = useState(false)
+  const [editQuestions, setEditQuestions] = useState<string[]>([])
+
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [error, setError] = useState('')
 
+  const isPro = profile?.plan === 'pro'
+  const maxQuestions = isPro ? MAX_QUESTIONS_PRO : MAX_QUESTIONS_FREE
+
   useEffect(() => {
+    if (!user) return
+
     const fetchJobAndApplications = async () => {
       setLoading(true)
 
-      // 구인글 정보 조회
-      const { data: jobData } = await supabase
+      const { data: rawJobData } = await supabase
         .from('job_posts')
         .select('*')
         .eq('id', id)
         .maybeSingle()
 
-      setJob(jobData as JobPost | null)
+      const jobData = rawJobData as JobPost | null
 
-      // 권한 확인
-      if (jobData && jobData.employer_id !== user?.id) {
+      if (!jobData) {
+        setLoading(false)
+        return
+      }
+
+      if (jobData.employer_id !== user.id) {
         router.push('/employer/jobs')
         return
       }
 
-      // 지원자 목록 조회
-      const { data: appData } = await supabase
+      setJob(jobData as JobPost)
+
+      // Populate edit state from existing job
+      setEditForm({
+        title: jobData.title,
+        location: jobData.location,
+        salary: jobData.salary,
+        work_hours: jobData.work_hours,
+        description: jobData.description,
+      })
+      setEditRequireResume(jobData.require_resume ?? false)
+      setEditQuestions(parseCustomQuestionsToStrings(jobData.custom_questions))
+
+      // Fetch applications
+      const { data: rawAppData } = await supabase
         .from('applications')
         .select('*, profiles(name, bio, visa_type)')
         .eq('job_post_id', id)
         .order('created_at', { ascending: false })
 
-      // 해당 공고의 채팅방 조회 (seeker_id → chat_room_id 매핑용)
-      const { data: chatRoomsData } = await supabase
+      // Map seeker_id → chat_room_id
+      const { data: rawChatRooms } = await supabase
         .from('chat_rooms')
         .select('id, seeker_id')
         .eq('job_post_id', id)
 
       const chatRoomMap = new Map<string, string>()
-      for (const room of chatRoomsData ?? []) {
+      for (const room of (rawChatRooms as unknown as { id: string; seeker_id: string }[]) ?? []) {
         chatRoomMap.set(room.seeker_id, room.id)
       }
 
-      const applicationsWithRoom = ((appData ?? []) as unknown as Omit<Application, 'chat_room_id'>[]).map(app => ({
+      const applicationsWithRoom = ((rawAppData ?? []) as unknown as Omit<Application, 'chat_room_id'>[]).map(app => ({
         ...app,
         chat_room_id: chatRoomMap.get(app.seeker_id) ?? null,
       }))
 
       setApplications(applicationsWithRoom)
-
-      if (jobData) {
-        setEditForm({
-          title: jobData.title,
-          location: jobData.location,
-          salary: jobData.salary,
-          work_hours: jobData.work_hours,
-          description: jobData.description,
-        })
-      }
-
       setLoading(false)
     }
 
-    if (user) fetchJobAndApplications()
+    fetchJobAndApplications()
   }, [id, user, router])
 
   const handleEditChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
@@ -103,23 +123,72 @@ export default function EmployerJobDetailPage() {
     setEditForm(prev => ({ ...prev, [name]: value }))
   }
 
+  const handleAddQuestion = () => {
+    if (editQuestions.length >= maxQuestions) return
+    setEditQuestions(prev => [...prev, ''])
+  }
+
+  const handleQuestionChange = (index: number, value: string) => {
+    setEditQuestions(prev => prev.map((q, i) => (i === index ? value : q)))
+  }
+
+  const handleRemoveQuestion = (index: number) => {
+    setEditQuestions(prev => prev.filter((_, i) => i !== index))
+  }
+
+  const handleEnterEdit = () => {
+    if (!job) return
+    setEditForm({
+      title: job.title,
+      location: job.location,
+      salary: job.salary,
+      work_hours: job.work_hours,
+      description: job.description,
+    })
+    setEditRequireResume(job.require_resume ?? false)
+    setEditQuestions(parseCustomQuestionsToStrings(job.custom_questions))
+    setError('')
+    setIsEditing(true)
+  }
+
   const handleSaveEdit = async () => {
     if (!job) return
+
+    if (!editForm.title.trim()) {
+      setError('공고 제목을 입력해주세요.')
+      return
+    }
+
     setActionLoading('edit')
     setError('')
 
-    const { error: updateError } = await supabase
+    const customQuestions = editQuestions
+      .map(q => q.trim())
+      .filter(Boolean)
+      .map((q, i) => ({ id: `q${i + 1}`, question: q }))
+
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error: updateError } = await (supabase as any)
       .from('job_posts')
-      .update(editForm)
+      .update({
+        ...editForm,
+        require_resume: editRequireResume,
+        custom_questions: customQuestions,
+      })
       .eq('id', job.id)
 
     if (updateError) {
-      setError('수정 실패')
+      setError('수정에 실패했습니다. 다시 시도해주세요.')
       setActionLoading(null)
       return
     }
 
-    setJob({ ...job, ...editForm })
+    setJob({
+      ...job,
+      ...editForm,
+      require_resume: editRequireResume,
+      custom_questions: customQuestions,
+    })
     setIsEditing(false)
     setActionLoading(null)
   }
@@ -127,17 +196,15 @@ export default function EmployerJobDetailPage() {
   const handleToggleStatus = async () => {
     if (!job) return
     setActionLoading('status')
-
     const newStatus = job.status === 'open' ? 'closed' : 'open'
-    await supabase.from('job_posts').update({ status: newStatus }).eq('id', job.id)
-
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    await (supabase as any).from('job_posts').update({ status: newStatus }).eq('id', job.id)
     setJob({ ...job, status: newStatus })
     setActionLoading(null)
   }
 
   const handleDelete = async () => {
     if (!confirm('정말 이 구인글을 삭제하시겠습니까?')) return
-
     setActionLoading('delete')
     await supabase.from('job_posts').delete().eq('id', id)
     router.push('/employer/jobs')
@@ -148,7 +215,8 @@ export default function EmployerJobDetailPage() {
     setActionLoading(appId)
 
     try {
-      await supabase.from('applications').update({ status }).eq('id', appId)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any).from('applications').update({ status }).eq('id', appId)
 
       if (status === 'accepted') {
         const { data: existing } = await supabase
@@ -160,34 +228,28 @@ export default function EmployerJobDetailPage() {
 
         let chatRoomId: string
 
-        if (existing?.id) {
-          chatRoomId = existing.id
+        if ((existing as unknown as { id: string } | null)?.id) {
+          chatRoomId = (existing as unknown as { id: string }).id
         } else {
-          const { data: newRoom, error: insertError } = await supabase
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const { data: newRoom, error: insertError } = await (supabase as any)
             .from('chat_rooms')
-            .insert({
-              job_post_id: job.id,
-              employer_id: user.id,
-              seeker_id: seekerId,
-            })
+            .insert({ job_post_id: job.id, employer_id: user.id, seeker_id: seekerId })
             .select('id')
             .single()
 
           if (insertError) throw insertError
-          chatRoomId = newRoom.id
+          chatRoomId = (newRoom as { id: string }).id
         }
 
-        setApplications(prev => prev.map(a => (a.id === appId ? { ...a, status } : a)))
+        setApplications(prev => prev.map(a => (a.id === appId ? { ...a, status, chat_room_id: chatRoomId } : a)))
         setActionLoading(null)
-
-        // 채팅방으로 이동
         router.push(`/chat/${chatRoomId}`)
       } else {
         setApplications(prev => prev.map(a => (a.id === appId ? { ...a, status } : a)))
         setActionLoading(null)
       }
-    } catch (err) {
-      console.error('Error:', err)
+    } catch {
       setActionLoading(null)
     }
   }
@@ -211,14 +273,14 @@ export default function EmployerJobDetailPage() {
 
   return (
     <div>
-      {/* Header */}
       <Link href="/employer/jobs" className="inline-flex items-center gap-1 text-sm text-gray-500 hover:text-gray-700 mb-4">
         ← 목록으로
       </Link>
 
-      {/* Job details */}
+      {/* Job card */}
       <div className="bg-white rounded-3xl border border-gray-100 p-6 mb-4">
         {!isEditing ? (
+          /* ── VIEW MODE ── */
           <>
             <div className="flex items-start justify-between gap-3 mb-4">
               <div>
@@ -279,10 +341,9 @@ export default function EmployerJobDetailPage() {
               </div>
             )}
 
-            {/* Actions */}
             <div className="flex gap-3">
               <button
-                onClick={() => setIsEditing(true)}
+                onClick={handleEnterEdit}
                 className="flex-1 px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-700 font-semibold text-sm hover:bg-gray-50 transition-all"
               >
                 수정하기
@@ -290,27 +351,31 @@ export default function EmployerJobDetailPage() {
               <button
                 onClick={handleToggleStatus}
                 disabled={actionLoading === 'status'}
-                className="flex-1 px-4 py-3 rounded-xl text-white font-semibold text-sm transition-all"
-                style={{ backgroundColor: 'var(--brand)', opacity: actionLoading === 'status' ? 0.6 : 1 }}
+                className="flex-1 px-4 py-3 rounded-xl text-white font-semibold text-sm transition-all disabled:opacity-60"
+                style={{ backgroundColor: 'var(--brand)' }}
               >
                 {job.status === 'open' ? '모집 마감' : '다시 모집'}
               </button>
               <button
                 onClick={handleDelete}
                 disabled={actionLoading === 'delete'}
-                className="flex-1 px-4 py-3 rounded-xl border border-red-200 bg-white text-red-600 font-semibold text-sm hover:bg-red-50 transition-all"
+                className="flex-1 px-4 py-3 rounded-xl border border-red-200 bg-white text-red-600 font-semibold text-sm hover:bg-red-50 transition-all disabled:opacity-60"
               >
                 삭제
               </button>
             </div>
           </>
         ) : (
+          /* ── EDIT MODE ── */
           <>
-            <h2 className="text-lg font-bold text-gray-900 mb-4">구인글 수정</h2>
+            <h2 className="text-lg font-bold text-gray-900 mb-5">구인글 수정</h2>
 
-            <div className="space-y-4 mb-4">
+            {/* Basic fields */}
+            <div className="space-y-4 mb-5">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">제목</label>
+                <label className="block text-sm font-semibold text-gray-900 mb-1.5">
+                  공고 제목 <span className="text-red-500">*</span>
+                </label>
                 <input
                   type="text"
                   name="title"
@@ -322,7 +387,7 @@ export default function EmployerJobDetailPage() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">위치</label>
+                  <label className="block text-sm font-semibold text-gray-900 mb-1.5">근무 위치</label>
                   <input
                     type="text"
                     name="location"
@@ -331,9 +396,8 @@ export default function EmployerJobDetailPage() {
                     className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
                   />
                 </div>
-
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">급여</label>
+                  <label className="block text-sm font-semibold text-gray-900 mb-1.5">시급 / 월급</label>
                   <input
                     type="text"
                     name="salary"
@@ -345,7 +409,7 @@ export default function EmployerJobDetailPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">근무 시간</label>
+                <label className="block text-sm font-semibold text-gray-900 mb-1.5">근무 시간</label>
                 <input
                   type="text"
                   name="work_hours"
@@ -356,7 +420,7 @@ export default function EmployerJobDetailPage() {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">상세 내용</label>
+                <label className="block text-sm font-semibold text-gray-900 mb-1.5">상세 내용</label>
                 <textarea
                   name="description"
                   value={editForm.description}
@@ -367,22 +431,107 @@ export default function EmployerJobDetailPage() {
               </div>
             </div>
 
-            {error && <p className="text-sm text-red-600 mb-4">{error}</p>}
+            {/* PRO filtering section */}
+            <div className="mb-5 rounded-2xl border border-orange-100 bg-orange-50/50 p-4">
+              <div className="mb-4 flex items-start gap-2">
+                <h3 className="text-sm font-bold text-gray-900">지원자 필터링 조건 설정</h3>
+                <span className="rounded-full bg-orange-500 px-2 py-0.5 text-[11px] font-bold text-white">PRO</span>
+              </div>
+
+              {/* Require resume toggle */}
+              <button
+                type="button"
+                onClick={() => setEditRequireResume(prev => !prev)}
+                className="mb-4 flex w-full items-center justify-between rounded-2xl border border-gray-100 bg-white px-4 py-3 text-left transition-all active:scale-[0.99]"
+                aria-pressed={editRequireResume}
+              >
+                <div>
+                  <p className="text-sm font-semibold text-gray-900">이력서 첨부 필수</p>
+                  <p className="mt-0.5 text-xs text-gray-400">지원자가 프로필에 등록한 이력서를 함께 제출합니다.</p>
+                </div>
+                <span
+                  className={`relative h-7 w-12 flex-shrink-0 rounded-full transition-colors ${
+                    editRequireResume ? 'bg-orange-500' : 'bg-gray-200'
+                  }`}
+                >
+                  <span
+                    className={`absolute top-1 h-5 w-5 rounded-full bg-white shadow-sm transition-transform ${
+                      editRequireResume ? 'translate-x-6' : 'translate-x-1'
+                    }`}
+                  />
+                </span>
+              </button>
+
+              {/* Custom questions CRUD */}
+              <div className="rounded-2xl border border-gray-100 bg-white p-4">
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div>
+                    <p className="text-sm font-semibold text-gray-900">지원자에게 사전 질문하기</p>
+                    <p className="mt-0.5 text-xs text-gray-400">
+                      최대 {maxQuestions}개까지 추가할 수 있습니다.{isPro ? ' (PRO)' : ''}
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={handleAddQuestion}
+                    disabled={editQuestions.length >= maxQuestions}
+                    className="flex-shrink-0 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-bold text-orange-600 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
+                  >
+                    + 추가
+                  </button>
+                </div>
+
+                {editQuestions.length === 0 ? (
+                  <p className="rounded-xl bg-gray-50 px-4 py-3 text-xs text-gray-400">
+                    아직 추가된 질문이 없습니다.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {editQuestions.map((q, index) => (
+                      <div key={index} className="flex gap-2">
+                        <input
+                          type="text"
+                          value={q}
+                          onChange={e => handleQuestionChange(index, e.target.value)}
+                          maxLength={120}
+                          placeholder={`질문 ${index + 1}. 예: 가능한 근무 시작일은 언제인가요?`}
+                          className="min-w-0 flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-orange-300"
+                        />
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveQuestion(index)}
+                          className="h-[46px] w-[46px] flex-shrink-0 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-400 transition-colors hover:text-red-500"
+                          aria-label={`질문 ${index + 1} 삭제`}
+                        >
+                          ×
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {error && (
+              <div className="mb-4 rounded-xl bg-red-50 border border-red-200 px-4 py-3">
+                <p className="text-sm text-red-600">{error}</p>
+              </div>
+            )}
 
             <div className="flex gap-3">
               <button
                 onClick={() => setIsEditing(false)}
-                className="flex-1 px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-700 font-semibold text-sm"
+                className="flex-1 px-4 py-3 rounded-xl border border-gray-200 bg-white text-gray-700 font-semibold text-sm hover:bg-gray-50 transition-all"
               >
                 취소
               </button>
               <button
                 onClick={handleSaveEdit}
                 disabled={actionLoading === 'edit'}
-                className="flex-1 px-4 py-3 rounded-xl text-white font-semibold text-sm transition-all"
-                style={{ backgroundColor: 'var(--brand)', opacity: actionLoading === 'edit' ? 0.6 : 1 }}
+                className="flex-1 px-4 py-3 rounded-xl text-white font-semibold text-sm transition-all disabled:opacity-60"
+                style={{ backgroundColor: 'var(--brand)' }}
               >
-                저장하기
+                {actionLoading === 'edit' ? '저장 중...' : '저장하기'}
               </button>
             </div>
           </>
@@ -425,15 +574,15 @@ export default function EmployerJobDetailPage() {
                     <button
                       onClick={() => handleApplicationStatus(app.id, 'accepted', app.seeker_id)}
                       disabled={actionLoading === app.id}
-                      className="flex-1 py-2 rounded-lg text-xs font-semibold text-white transition-all"
-                      style={{ backgroundColor: 'var(--brand)', opacity: actionLoading === app.id ? 0.6 : 1 }}
+                      className="flex-1 py-2 rounded-lg text-xs font-semibold text-white transition-all disabled:opacity-60"
+                      style={{ backgroundColor: 'var(--brand)' }}
                     >
                       수락 + 채팅
                     </button>
                     <button
                       onClick={() => handleApplicationStatus(app.id, 'rejected', app.seeker_id)}
                       disabled={actionLoading === app.id}
-                      className="flex-1 py-2 rounded-lg text-xs font-semibold text-red-600 border border-red-200 bg-white hover:bg-red-50 transition-all"
+                      className="flex-1 py-2 rounded-lg text-xs font-semibold text-red-600 border border-red-200 bg-white hover:bg-red-50 transition-all disabled:opacity-60"
                     >
                       거절
                     </button>
@@ -473,6 +622,19 @@ export default function EmployerJobDetailPage() {
   )
 }
 
+// Parse custom_questions JSON → string array for edit state
+function parseCustomQuestionsToStrings(
+  value: Database['public']['Tables']['job_posts']['Row']['custom_questions'],
+): string[] {
+  if (!Array.isArray(value)) return []
+  return value
+    .map(item => {
+      if (!item || typeof item !== 'object' || Array.isArray(item)) return null
+      return typeof item.question === 'string' ? item.question.trim() : null
+    })
+    .filter((q): q is string => q !== null && q.length > 0)
+}
+
 function getQuestionCount(value: Database['public']['Tables']['job_posts']['Row']['custom_questions']) {
   if (!Array.isArray(value)) return 0
   return value.filter(item => {
@@ -483,7 +645,6 @@ function getQuestionCount(value: Database['public']['Tables']['job_posts']['Row'
 
 function parseCustomAnswers(value: Database['public']['Tables']['applications']['Row']['custom_answers']): CustomAnswer[] {
   if (!Array.isArray(value)) return []
-
   return value
     .map(item => {
       if (!item || typeof item !== 'object' || Array.isArray(item)) return null

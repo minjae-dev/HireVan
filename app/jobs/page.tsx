@@ -57,7 +57,7 @@ export default function JobsPage() {
         .from('applications')
         .select('job_post_id')
         .eq('seeker_id', profile.id)
-      if (data) setAppliedIds(new Set(data.map(a => a.job_post_id)))
+      if (data) setAppliedIds(new Set((data as unknown as { job_post_id: string }[]).map(a => a.job_post_id)))
     }
     fetchApplied()
   }, [profile])

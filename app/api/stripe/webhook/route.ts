@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 import Stripe from 'stripe'
 import { getSupabaseAdmin } from '@/lib/supabase-admin'
+import type { SupabaseClient } from '@supabase/supabase-js'
+
+// The Stripe webhook updates columns not in database.types.ts (stripe_customer_id, etc.)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type AnySupabase = SupabaseClient<any>
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
@@ -75,14 +80,15 @@ export async function POST(request: NextRequest) {
     )
   }
 
-  const supabase = getSupabaseAdmin()
-  if (!supabase) {
+  const supabaseRaw = getSupabaseAdmin()
+  if (!supabaseRaw) {
     console.error('[stripe/webhook] Supabase admin client unavailable')
     return NextResponse.json(
       { error: 'Supabase admin client unavailable.' },
       { status: 503 },
     )
   }
+  const supabase = supabaseRaw as AnySupabase
 
   // 2. 디스패치
   try {
@@ -128,7 +134,7 @@ export async function POST(request: NextRequest) {
  * Checkout 완료 → PRO 활성화 + customer / subscription ID 저장
  */
 async function handleCheckoutCompleted(
-  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  supabase: AnySupabase,
   stripe: Stripe,
   session: Stripe.Checkout.Session,
 ) {
@@ -206,7 +212,7 @@ async function handleCheckoutCompleted(
  * 갱신 결제 성공 → PRO 유지, 유예기간 해제
  */
 async function handleInvoicePaymentSucceeded(
-  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  supabase: AnySupabase,
   invoice: Stripe.Invoice,
 ) {
   const subscriptionId = typeof (invoice as unknown as { subscription?: string | Stripe.Subscription }).subscription === 'string'
@@ -263,7 +269,7 @@ async function handleInvoicePaymentSucceeded(
  * 결제 실패 → 3일 유예기간 시작 (즉시 차단 X)
  */
 async function handleInvoicePaymentFailed(
-  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  supabase: AnySupabase,
   invoice: Stripe.Invoice,
 ) {
   const subscriptionId = typeof (invoice as unknown as { subscription?: string | Stripe.Subscription }).subscription === 'string'
@@ -317,7 +323,7 @@ async function handleInvoicePaymentFailed(
  * 구독 상태 변경 (past_due / canceled / paused / incomplete 등)
  */
 async function handleSubscriptionUpdated(
-  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  supabase: AnySupabase,
   subscription: Stripe.Subscription,
 ) {
   const userId = await resolveUserId(supabase, subscription)
@@ -366,7 +372,7 @@ async function handleSubscriptionUpdated(
  * → 즉시 FREE 다운그레이드
  */
 async function handleSubscriptionDeleted(
-  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  supabase: AnySupabase,
   subscription: Stripe.Subscription,
 ) {
   const userId = await resolveUserId(supabase, subscription)
@@ -412,7 +418,7 @@ async function handleSubscriptionDeleted(
  * 2) profiles.stripe_customer_id = subscription.customer
  */
 async function resolveUserId(
-  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  supabase: AnySupabase,
   subscriptionOrId: Stripe.Subscription | string,
 ): Promise<string | null> {
   let metadata: Stripe.Metadata | null = null
@@ -450,7 +456,7 @@ async function resolveUserId(
  * notification row 삽입 (service role)
  */
 async function pushNotification(
-  supabase: NonNullable<ReturnType<typeof getSupabaseAdmin>>,
+  supabase: AnySupabase,
   userId: string,
   payload: {
     type: string

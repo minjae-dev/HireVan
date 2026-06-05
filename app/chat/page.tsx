@@ -118,7 +118,7 @@ export default function ChatListPage() {
           if (data) {
             setRooms(prev => [data as unknown as ChatRoomRow, ...prev])
             // 새 공고면 자동 펼침
-            setExpandedJobs(prev => new Set(prev).add(data.job_post_id))
+            setExpandedJobs(prev => new Set(prev).add((data as unknown as ChatRoomRow).job_post_id))
           }
         },
       )

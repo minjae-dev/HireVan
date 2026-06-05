@@ -56,7 +56,8 @@ export default function NewJobPage() {
     setLoading(true)
     setError('')
 
-    const { data, error: insertError } = await supabase
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data, error: insertError } = await (supabase as any)
       .from('job_posts')
       .insert({
         employer_id: user.id,
@@ -80,7 +81,7 @@ export default function NewJobPage() {
       return
     }
 
-    router.push(`/jobs/${data.id}`)
+    router.push(`/jobs/${(data as { id: string }).id}`)
   }
 
   // Today's date string for min on deadline picker

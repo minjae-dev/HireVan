@@ -423,6 +423,7 @@ export default function EmployerDashboardPage() {
                   <BlurredSeekerCard
                     key={seeker.id}
                     seeker={seeker}
+                    isProEmployer={isPro}
                     canViewForFree={isPro}
                     creditsRemaining={isPro ? undefined : creditsRemaining}
                     interactive

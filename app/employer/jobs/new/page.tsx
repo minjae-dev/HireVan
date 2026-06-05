@@ -124,7 +124,8 @@ export default function EmployerNewJobPage() {
 
       console.log('Submitting job post with data:', jobPostData)
 
-      const { data, error: insertError } = await supabase
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error: insertError } = await (supabase as any)
         .from('job_posts')
         .insert(jobPostData)
         .select()

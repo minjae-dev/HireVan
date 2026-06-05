@@ -178,6 +178,7 @@ function MatchCardWrapper({
         availability: null,
       }}
       canViewForFree={false}
+      isProEmployer={false}
       interactive
       onUnlockClick={onClick}
     />

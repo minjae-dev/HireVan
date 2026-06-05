@@ -26,7 +26,8 @@ function NewReviewForm() {
         .eq('id', roomId)
         .maybeSingle()
       if (data) {
-        setRevieweeId(data.employer_id === user.id ? data.seeker_id : data.employer_id)
+        const room = data as unknown as { employer_id: string; seeker_id: string }
+        setRevieweeId(room.employer_id === user.id ? room.seeker_id : room.employer_id)
       }
     }
     fetchRoom()
@@ -38,7 +39,8 @@ function NewReviewForm() {
     setLoading(true)
     setError('')
 
-    const { error } = await supabase.from('reviews').insert({
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { error } = await (supabase as any).from('reviews').insert({
       chat_room_id: roomId,
       reviewer_id: user.id,
       reviewee_id: revieweeId,

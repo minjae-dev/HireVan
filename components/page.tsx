@@ -62,8 +62,8 @@ export default function ChatListPage() {
 
           return {
             ...room,
-            last_message: lastMsg?.content ?? null,
-            last_message_at: lastMsg?.created_at ?? null,
+            last_message: (lastMsg as unknown as { content: string; created_at: string } | null)?.content ?? null,
+            last_message_at: (lastMsg as unknown as { content: string; created_at: string } | null)?.created_at ?? null,
           }
         })
       )
