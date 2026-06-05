@@ -176,6 +176,13 @@ function MatchCardWrapper({
         visa_type: null,
         visa_expiry: null,
         availability: null,
+        // 매칭 카드(RPC)는 신규 필드를 아직 반환하지 않으므로 null.
+        // PRO 사용자가 카드를 클릭해 view_seeker_profile RPC를 호출하면
+        // profiles_public 뷰를 통해 해당 필드가 채워진다.
+        local_experience_months: null,
+        skills: null,
+        available_shifts: null,
+        postal_code_prefix: null,
       }}
       canViewForFree={false}
       isProEmployer={false}

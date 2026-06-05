@@ -21,6 +21,10 @@ interface BlurredSeekerCardProps {
     | 'visa_type'
     | 'visa_expiry'
     | 'availability'
+    | 'local_experience_months'
+    | 'skills'
+    | 'available_shifts'
+    | 'postal_code_prefix'
   >
   /** 카드 클릭 시 호출 — 상위 컴포넌트에서 useSeekerAccess().open() */
   onUnlockClick?: () => void
@@ -93,6 +97,33 @@ export default function BlurredSeekerCard({
               {seeker.bio}
             </p>
           )}
+
+          {/* ── 구직자 경쟁력 뱃지 (2026-06-05 추가) ──
+              - 6개월+ 캐나다 경력: 🌟 [캐나다 경력 6개월+]
+              - 주말/마감 가능:   🔥 [주말/마감 가능]
+              두 조건은 항상 헤더에 노출되어 사장님이 한 눈에 판단할 수 있다. */}
+          {canViewForFree &&
+            (hasLocalExperienceBadge(seeker.local_experience_months) ||
+              hasWeekendOrClosingBadge(seeker.available_shifts)) && (
+              <div className="mt-2 flex flex-wrap gap-1.5">
+                {hasLocalExperienceBadge(seeker.local_experience_months) && (
+                  <span
+                    data-testid="badge-local-experience"
+                    className="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-bold text-amber-800"
+                  >
+                    🌟 캐나다 경력 6개월+
+                  </span>
+                )}
+                {hasWeekendOrClosingBadge(seeker.available_shifts) && (
+                  <span
+                    data-testid="badge-weekend-closing"
+                    className="inline-flex items-center rounded-full bg-orange-100 px-2 py-0.5 text-[11px] font-bold text-orange-700"
+                  >
+                    🔥 주말/마감 가능
+                  </span>
+                )}
+              </div>
+            )}
         </div>
       </div>
 
@@ -159,6 +190,20 @@ export default function BlurredSeekerCard({
               <p className="text-[11px] text-gray-400">미설정</p>
             )}
           </div>
+
+          {/* Skills — 카드 하단 태그 (2026-06-05 추가) */}
+          {Array.isArray(seeker.skills) && seeker.skills.length > 0 && (
+            <div className="col-span-2 flex flex-wrap gap-1 pt-1" data-testid="skills-tags">
+              {seeker.skills.map(skill => (
+                <span
+                  key={skill}
+                  className="px-2 py-1 rounded-full bg-gray-100 text-[11px] font-semibold text-gray-700"
+                >
+                  {skill}
+                </span>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Blur overlay (CTA) — canViewForFree=false 일 때만 */}
@@ -254,4 +299,26 @@ const SHIFT_LABEL: Record<string, string> = {
   afternoon: '오후',
   evening: '저녁',
   night: '밤',
+}
+
+/**
+ * 캐나다 경력 6개월+ 뱃지 표시 여부.
+ * - null/undefined (열람 권한 없음) → false (블러 처리된 상태에선 뱃지 의미 없음)
+ * - 6 이상 → true
+ */
+function hasLocalExperienceBadge(months: number | null | undefined): boolean {
+  return typeof months === 'number' && months >= 6
+}
+
+/**
+ * 주말/마감 가능 뱃지 표시 여부.
+ * - '주말 전체' 또는 '마감조' 가 available_shifts 배열에 포함되면 true.
+ * - '주말 전체' 자체는 모든 주말 슬롯을 아우르는 표현이므로,
+ *   별도로 '주말' 만 검색하지 않고 완전 매칭한다.
+ * - 데이터 정합성을 위해 '마감조' / '주말 전체' 외 일반적 부분문자열(예: '주말 오후')은
+ *   별도 뱃지로 취급하지 않는다 (사용자가 정확히 의도한 키워드만 카운트).
+ */
+function hasWeekendOrClosingBadge(shifts: string[] | null | undefined): boolean {
+  if (!Array.isArray(shifts)) return false
+  return shifts.includes('주말 전체') || shifts.includes('마감조')
 }

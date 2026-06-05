@@ -28,6 +28,9 @@ export type EnglishLevel = 'beginner' | 'intermediate' | 'advanced' | 'native'
  * 가용 시간 (availability) JSON shape.
  * 예: { monday: ['morning', 'evening'], sunday: ['night'] }
  */
+export type ShiftSlot = 'morning' | 'afternoon' | 'evening' | 'night'
+export type Weekday = keyof AvailabilityMatrix
+
 export type AvailabilityMatrix = Partial<{
   monday: ShiftSlot[]
   tuesday: ShiftSlot[]
@@ -84,10 +87,6 @@ export interface JobMatchResult {
 }
 
 /**
-export type ShiftSlot = 'morning' | 'afternoon' | 'evening' | 'night'
-export type Weekday = keyof AvailabilityMatrix
-
-/**
  * employer 대시보드에서 사용하는 billing 상태 객체 (RPC `get_employer_billing_status` 반환값).
  */
 export interface EmployerBillingStatus {
@@ -142,6 +141,15 @@ export interface PublicProfile {
   has_sir: boolean | null
   has_foodsafe: boolean | null
   english_level: EnglishLevel | null
+  // ── 구직자 경쟁력 필드 (2026-06-05 추가) ──
+  /** 캐나다 내 근무 경력 (개월). 0 이상. */
+  local_experience_months: number | null
+  /** 보유 스킬 태그. 예: ['POS', '캐셔', '서빙']. */
+  skills: string[] | null
+  /** 가능 근무 시간대. 예: ['마감조', '주말 전체']. */
+  available_shifts: string[] | null
+  /** 희망 근무지 캐나다 우편번호 3자리 (영문+숫자+영문). 예: 'V6B'. */
+  postal_code_prefix: string | null
 }
 
 /**
@@ -206,6 +214,9 @@ export interface Database {
           stripe_subscription_id: string | null
           // Credits & PRO
           credit_count: number
+          // Seeker credit reward system
+          credits: number
+          is_verified: boolean
           pro_subscriber: boolean
           subscription_ends_at: string | null
           // Grace period
@@ -222,6 +233,11 @@ export interface Database {
           has_foodsafe: boolean
           availability: Json
           english_level: EnglishLevel | null
+          // ── 구직자 경쟁력 필드 (2026-06-05 추가) ──
+          local_experience_months: number
+          skills: string[]
+          available_shifts: string[]
+          postal_code_prefix: string | null
           created_at: string
         }
         Insert: {
@@ -236,6 +252,9 @@ export interface Database {
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           credit_count?: number
+          // Seeker credit reward system
+          credits?: number
+          is_verified?: boolean
           pro_subscriber?: boolean
           subscription_ends_at?: string | null
           grace_period_active?: boolean
@@ -250,6 +269,11 @@ export interface Database {
           has_foodsafe?: boolean
           availability?: Json
           english_level?: EnglishLevel | null
+          // ── 구직자 경쟁력 필드 (2026-06-05 추가) ──
+          local_experience_months?: number
+          skills?: string[]
+          available_shifts?: string[]
+          postal_code_prefix?: string | null
           created_at?: string
         }
         Update: {
@@ -264,6 +288,9 @@ export interface Database {
           stripe_customer_id?: string | null
           stripe_subscription_id?: string | null
           credit_count?: number
+          // Seeker credit reward system
+          credits?: number
+          is_verified?: boolean
           pro_subscriber?: boolean
           subscription_ends_at?: string | null
           grace_period_active?: boolean
@@ -278,6 +305,11 @@ export interface Database {
           has_foodsafe?: boolean
           availability?: Json
           english_level?: EnglishLevel | null
+          // ── 구직자 경쟁력 필드 (2026-06-05 추가) ──
+          local_experience_months?: number
+          skills?: string[]
+          available_shifts?: string[]
+          postal_code_prefix?: string | null
           created_at?: string
         }
         Relationships: []
