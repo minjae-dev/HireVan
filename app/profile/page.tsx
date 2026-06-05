@@ -223,6 +223,12 @@ export default function ProfilePage() {
               {roleLabel}
             </span>
           </div>
+          <Link
+            href="/profile/edit"
+            className="flex-shrink-0 rounded-full border border-orange-300 bg-white px-4 py-2 text-xs font-bold text-orange-600 transition-all active:scale-95 hover:bg-orange-50"
+          >
+            ✏️ 수정
+          </Link>
         </div>
 
         <form onSubmit={handleSave} className="flex flex-col gap-4">
