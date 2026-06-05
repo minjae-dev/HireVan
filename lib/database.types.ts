@@ -58,19 +58,7 @@ export interface SeekerPreferences {
   updated_at: string
 }
 
-/**
- * 구직자-공고 매칭 결과 (job_to_seeker_matches 테이블)
- */
-export interface JobToSeekerMatch {
-  id: string
-  seeker_id: string
-  job_post_id: string
-  match_score: number
-  matched_reasons: string[]
-  notified: boolean
-  viewed: boolean
-  created_at: string
-}
+
 
 /**
  * match_jobs_to_seeker RPC 반환 결과
@@ -650,39 +638,7 @@ export interface Database {
         }
         Relationships: []
       }
-      job_to_seeker_matches: {
-        Row: {
-          id: string
-          seeker_id: string
-          job_post_id: string
-          match_score: number
-          matched_reasons: string[]
-          notified: boolean
-          viewed: boolean
-          created_at: string
-        }
-        Insert: {
-          id?: string
-          seeker_id: string
-          job_post_id: string
-          match_score?: number
-          matched_reasons?: string[]
-          notified?: boolean
-          viewed?: boolean
-          created_at?: string
-        }
-        Update: {
-          id?: string
-          seeker_id?: string
-          job_post_id?: string
-          match_score?: number
-          matched_reasons?: string[]
-          notified?: boolean
-          viewed?: boolean
-          created_at?: string
-        }
-        Relationships: []
-      }
+
       notifications: {
         Row: {
           id: string

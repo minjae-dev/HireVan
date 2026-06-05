@@ -5,7 +5,6 @@
 import BlurredSeekerCard from '@/components/BlurredSeekerCard'
 import GracePeriodBanner from '@/components/GracePeriodBanner'
 import ProUpsellModal from '@/components/ProUpsellModal'
-import SeekerMatchList from '@/components/SeekerMatchList'
 import { useAuth } from '@/lib/auth-context'
 import type { Database, EmployerBillingStatus, PublicProfile } from '@/lib/database.types'
 import { supabase } from '@/lib/supabase'
@@ -236,65 +235,6 @@ export default function EmployerDashboardPage() {
         }}
       />
 
-      {/* 3. 내 구인글 + 매칭 분석 */}
-      <section className="rounded-3xl border border-gray-100 bg-white p-6">
-        <div className="mb-4 flex items-end justify-between gap-3">
-          <div>
-            <h2 className="text-lg font-bold text-gray-900">📋 내 구인글 · 매칭</h2>
-            <p className="mt-0.5 text-xs text-gray-500">
-              모집 중인 공고에 가장 잘 맞는 구직자를 추천받으세요.
-            </p>
-          </div>
-          <Link
-            href="/employer/jobs"
-            className="flex-shrink-0 text-xs font-semibold text-orange-500 hover:underline"
-          >
-            전체 보기 ›
-          </Link>
-        </div>
-
-        {jobsLoading ? (
-          <div className="flex justify-center py-8">
-            <div className="w-6 h-6 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
-          </div>
-        ) : jobs.length === 0 ? (
-          <div className="rounded-2xl border-2 border-dashed border-gray-200 bg-gray-50 p-6 text-center">
-            <p className="text-2xl mb-1">📭</p>
-            <p className="text-sm font-semibold text-gray-700">아직 등록한 공고가 없어요</p>
-            <p className="mt-1 text-xs text-gray-500">
-              첫 공고를 등록하면 매칭 추천을 받을 수 있습니다.
-            </p>
-            <Link
-              href="/employer/jobs/new"
-              className="mt-4 inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-bold text-white transition-all active:scale-95"
-              style={{ backgroundColor: 'var(--brand)' }}
-            >
-              ＋ 첫 공고 등록하기
-            </Link>
-          </div>
-        ) : (
-          <>
-            <div className="mb-4 flex flex-wrap gap-2">
-              {jobs.map(job => (
-                <button
-                  key={job.id}
-                  type="button"
-                  onClick={() => setSelectedJobId(job.id)}
-                  className={`rounded-full px-4 py-2 text-xs font-semibold transition-all ${
-                    selectedJobId === job.id
-                      ? 'text-white'
-                      : 'border border-gray-200 bg-white text-gray-600 hover:border-orange-200'
-                  }`}
-                  style={selectedJobId === job.id ? { backgroundColor: 'var(--brand)' } : {}}
-                >
-                  {job.title}
-                </button>
-              ))}
-            </div>
-            {selectedJobId && <SeekerMatchList jobId={selectedJobId} />}
-          </>
-        )}
-      </section>
 
       {/* 3.5 PRO 전용: 사전 질문 & 서류 필터링 카드 */}
       <PreScreeningCard
