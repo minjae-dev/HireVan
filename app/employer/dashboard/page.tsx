@@ -112,36 +112,36 @@ export default function EmployerDashboardPage() {
   const fetchSeekers = async () => {
     setSeekersLoading(true)
     setSearched(true)
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    let query = (supabase as any)
-      .from('profiles')
-      .select('*')
-      .eq('role', 'seeker')
-      .order('created_at', { ascending: false })
-      .limit(30)
+    try {
+      // profiles_public 뷰 사용 — 민감 정보(Stripe ID 등) 노출 방지
+      // RLS가 profiles_public에도 적용되므로 안전
+      let query = supabase
+        .from('profiles_public')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(30)
 
-    // 필터 조건 있을 때만 추가
-    if (filterNeighborhood) {
-      query = query.eq('neighborhood', filterNeighborhood)
-    }
+      // 필터 조건 있을 때만 추가 (뷰에서 지원하는 컬럼만)
+      if (filterNeighborhood) {
+        query = query.eq('neighborhood', filterNeighborhood)
+      }
 
-    if (filterCert === 'sir') {
-      query = query.eq('has_sir', true)
-    }
+      if (filterCert === 'sir') {
+        query = query.eq('has_sir', true)
+      }
 
-    if (filterCert === 'foodsafe') {
-      query = query.eq('has_foodsafe', true)
-    }
+      if (filterCert === 'foodsafe') {
+        query = query.eq('has_foodsafe', true)
+      }
 
-    const { data, error } = await query
+      const { data, error } = await query
 
       if (error) {
         console.warn('[dashboard] fetch seekers error:', error)
         setSeekers([])
       } else {
         let list = (data as PublicProfile[]) ?? []
-        // 클라이언트 측 필터 (premium 컬럼이 NULL인 경우 matches 가 false)
+        // 필터는 서버에서 적용 되었지만 클라이언트에서 한 번 더 보장
         if (filterNeighborhood) {
           list = list.filter(s => s.neighborhood === filterNeighborhood)
         }

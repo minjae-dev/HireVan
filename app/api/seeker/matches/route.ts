@@ -40,11 +40,17 @@ export async function GET(request: NextRequest) {
   const limit = Math.min(Math.max(parseInt(searchParams.get('limit') ?? '20', 10) || 20, 1), 50)
 
   try {
-    // 3. RPC 호출 — match_jobs_to_seeker
-    const { data, error } = await supabase.rpc('match_jobs_to_seeker', {
-      p_seeker_id: user.id,
-      p_limit: limit,
-    })
+    // 44번 라인 주변 코드를 아래와 같이 수정하세요.
+    const { data, error } = await supabase.rpc<'match_jobs_to_seeker', {
+      p_seeker_id: string;
+      p_limit: number;
+    }>(
+      'match_jobs_to_seeker', 
+      {
+        p_seeker_id: user.id,
+        p_limit: limit,
+      }
+    )
 
     if (error) {
       console.error('[seeker/matches] RPC error:', error.message)

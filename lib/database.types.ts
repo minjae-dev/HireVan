@@ -112,8 +112,11 @@ export interface ViewSeekerProfileResult {
 /**
  * `profiles_public` 뷰 / `view_seeker_profile` RPC 안의 `profile` 필드.
  * premium 필드는 viewer 권한에 따라 NULL일 수 있음.
+ *
+ * NOTE: `type` (interface 가 아닌 것) 이어야 Supabase generated types 의
+ *       Record<string, unknown> 제약을 만족하여 never 로 붕괴되지 않는다.
  */
-export interface PublicProfile {
+export type PublicProfile = {
   id: string
   role: 'employer' | 'seeker'
   name: string
@@ -124,6 +127,7 @@ export interface PublicProfile {
   visa_status: VisaStatus | string | null
   visa_type: string | null
   visa_expiry: string | null
+  visa_expiry_date: string | null
   availability: AvailabilityMatrix | null
   neighborhood: string | null
   has_sir: boolean | null
