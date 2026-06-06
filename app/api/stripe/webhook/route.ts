@@ -151,7 +151,7 @@ async function handleCheckoutCompleted(
   let customerId = typeof session.customer === 'string'
     ? session.customer
     : session.customer?.id ?? null
-  let subscriptionId = typeof session.subscription === 'string'
+  const subscriptionId = typeof session.subscription === 'string'
     ? session.subscription
     : session.subscription?.id ?? null
 
@@ -473,8 +473,7 @@ async function pushNotification(
     metadata: Record<string, unknown>
   },
 ) {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const { error } = await (supabase as any)
+  const { error } = await supabase
     .from('notifications')
     .insert({
       user_id: userId,

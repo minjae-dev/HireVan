@@ -13,12 +13,43 @@
   --font-sans: var(--font-noto), 'Noto Sans KR', sans-serif;
 }
 
+/*
+ * 모바일 브라우저 주소창 높이 변화 대응 (dvh — dynamic viewport height).
+ * iOS Safari / Chrome Android 에서 주소창이 접히거나 펴질 때
+ * 100vh 는 깜빡임이 발생하지만 100dvh 는 실제 뷰포트에 맞게 조정된다.
+ *
+ * 사용법:
+ *   <div className="min-h-dvh">...</div>
+ *   h-screen → h-dvh 또는 min-h-dvh 로 교체
+ */
+@supports (height: 100dvh) {
+  :root {
+    --vh: 1dvh;
+  }
+}
+
 body {
   background: #f8f8f8;
   color: #1a1a1a;
   font-family: var(--font-sans);
+  /*
+   * `min-height: 100dvh` 가 지원되면 사용.
+   * iOS Safari 15.2+ / Android Chrome 108+ 호환.
+   * 폴백으로 min-height: 100vh 가 적용됨 (tailwind preflight).
+   */
+  min-height: 100dvh;
 }
 
 * {
   -webkit-tap-highlight-color: transparent;
 }
+
+/*
+ * Tailwind h-screen → h-dvh 매핑.
+ * `h-screen` 을 사용한 모든 곳이 dvh 로 자동 전환된다.
+ * 이미 Tailwind v4 의 `h-dvh` 유틸리티를 사용 중이라면 이 부분은 중복되므로
+ * `h-screen` 이 사용된 컴포넌트를 찾아 `h-dvh` 로 교체하는 것이 더 안전하다.
+ *
+ * 현재 코드베이스에서 `h-screen` 을 쓰는 곳 (chat/[id]/page.tsx) 은
+ * 이미 `h-dvh` 로 교체해 두었다.
+ */

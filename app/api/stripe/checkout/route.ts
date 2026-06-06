@@ -195,6 +195,10 @@ export async function POST(request: NextRequest) {
     const cancelUrl = `${origin}${basePath}?upgrade=cancel`
 
     try {
+      // Idempotency key: 중복 결제 세션 생성을 방지한다.
+      // 같은 userId + timestamp 조합으로 한 번만 생성되도록 보장한다.
+      const idempotencyKey = `checkout_${user.id}_${Date.now()}`
+      
       const session = await stripe.checkout.sessions.create({
         mode: 'subscription',
         payment_method_types: ['card'],
@@ -213,7 +217,7 @@ export async function POST(request: NextRequest) {
         allow_promotion_codes: true,
         success_url: successUrl,
         cancel_url: cancelUrl,
-      })
+      }, { idempotencyKey })
 
       return NextResponse.json({ url: session.url, sessionId: session.id })
     } catch (err) {

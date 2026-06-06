@@ -5,6 +5,7 @@
 import { useAuth } from '@/lib/auth-context'
 import type { Database } from '@/lib/database.types'
 import { supabase } from '@/lib/supabase'
+import { subscribeWithReconnect } from '@/lib/realtime'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'
@@ -68,7 +69,8 @@ function parseStatusUpdate(content: string) {
 }
 
 export default function ChatRoomPage() {
-  const { id } = useParams()
+  const params = useParams()
+  const id = typeof params.id === 'string' ? params.id : ''
   const router = useRouter()
   const { user } = useAuth()
 
@@ -159,7 +161,7 @@ export default function ChatRoomPage() {
             .from('reviews')
             .select('*', { count: 'exact', head: true })
             .eq('chat_room_id', data.id)
-            .eq('author_id', user.id)
+            .eq('reviewer_id', user.id)
 
           if (!checkError && count !== null && count > 0) {
             setHasReview(true)
@@ -267,46 +269,33 @@ export default function ChatRoomPage() {
   useEffect(() => {
     if (!id) return
 
-    const channel = supabase
-      .channel(`room:${id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'messages',
-          filter: `chat_room_id=eq.${id}`,
-        },
-        async payload => {
-          if (payload.eventType === 'INSERT') {
-            const newMsg = payload.new as Database['public']['Tables']['messages']['Row']
-            const { data: profileData } = await supabase
-              .from('profiles')
-              .select('name')
-              .eq('id', newMsg.sender_id)
-              .maybeSingle()
+    return subscribeWithReconnect({
+      roomId: id,
+      table: 'messages',
+      filter: `chat_room_id=eq.${id}`,
+      onInsert: async (payload) => {
+        const newMsg = payload.new as Database['public']['Tables']['messages']['Row']
+        const { data: profileData } = await supabase
+          .from('profiles')
+          .select('name')
+          .eq('id', newMsg.sender_id)
+          .maybeSingle()
 
-            const completeMsg: Message = {
-              ...newMsg,
-              profiles: profileData || null,
-            }
-            setMessages(prev => {
-              if (prev.some(m => m.id === completeMsg.id)) return prev
-              return [...prev, completeMsg]
-            })
-            setTimeout(() => {
-              if (scrollRef.current) {
-                scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-              }
-            }, 50)
-          }
+        const completeMsg: Message = {
+          ...newMsg,
+          profiles: profileData || null,
         }
-      )
-      .subscribe()
-
-    return () => {
-      supabase.removeChannel(channel)
-    }
+        setMessages(prev => {
+          if (prev.some(m => m.id === completeMsg.id)) return prev
+          return [...prev, completeMsg]
+        })
+        setTimeout(() => {
+          if (scrollRef.current) {
+            scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+          }
+        }, 50)
+      },
+    })
   }, [id])
 
   const handleSendMessage = async (e: React.FormEvent) => {
@@ -471,15 +460,15 @@ export default function ChatRoomPage() {
     try {
       const { error } = await supabase.from('reviews').insert({
         chat_room_id: room.id,
-        author_id: user.id,
-        target_id: targetUserId,
+        reviewer_id: user.id,
+        reviewee_id: targetUserId,
         rating,
         comment: comment.trim(),
       })
       if (error) throw error
       setHasReview(true)
       setShowReviewModal(false)
-      alert('후기가 성공적으로 등록되었습니다.')
+      setReviewError('')
     } catch (err: any) {
       console.error(err)
       setReviewError('후기 등록 중 오류가 발생했습니다.')
@@ -492,7 +481,7 @@ export default function ChatRoomPage() {
   const opponentName = isEmployer ? room?.seeker?.name : room?.employer?.name
 
   return (
-    <div className="mx-auto flex h-screen max-w-md flex-col bg-gray-50/60 shadow-inner">
+    <div className="mx-auto flex h-dvh max-w-md flex-col bg-gray-50/60 shadow-inner">
       <header className="flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3.5">
         <div className="flex items-center gap-3">
           <Link href="/chat" className="text-xl text-orange-500 active:scale-95">◀</Link>
