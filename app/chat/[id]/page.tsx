@@ -34,7 +34,6 @@ type InterviewProposal = {
 const RATING_LABELS = ['', '아쉬웠어요', '조금 아쉬웠어요', '보통이에요', '좋았어요', '최고였어요']
 
 const INTERVIEW_PREFIX = '[INTERVIEW_PROPOSAL]'
-const MESSAGE_PAGE_SIZE = 30
 const INTERVIEW_STATUSES = new Set<InterviewProposal['status']>([
   'pending',
   'confirmed',
@@ -241,26 +240,18 @@ export default function ChatRoomPage() {
     }
   }, [messages])
 
+  // 실시간 구독 - 채널 ref를 사용하여 안전하게 정리
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+
   useEffect(() => {
-    const container = messagesContainerRef.current
-    const sentinel = topSentinelRef.current
-    if (!container || !sentinel) return
+    if (!id) return
 
-    const observer = new IntersectionObserver(
-      entries => {
-        if (entries[0]?.isIntersecting) {
-          loadOlderMessages()
-        }
-      },
-      { root: container, rootMargin: '80px 0px 0px 0px' },
-    )
+    // 이전 채널이 있다면 정리 (급격한 id 변경 시 대비)
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
+    }
 
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [loadOlderMessages])
-
-  // 실시간 구독
-  useEffect(() => {
     const channel = supabase
       .channel(`room:${id}`)
       .on(
@@ -323,8 +314,15 @@ export default function ChatRoomPage() {
       )
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
-  }, [id, user?.id])
+    channelRef.current = channel
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
+    }
+  }, [id])
 
   // 메시지 전송
   const handleSend = async (e: React.FormEvent) => {
@@ -458,38 +456,43 @@ export default function ChatRoomPage() {
     return now.getTime() - dt.getTime() > 60 * 60 * 1000
   }
 
-  const handleReportNoShow = async (msg: Message) => {
-    if (!user || !room) return
-    const proposal = parseProposal(msg.content)
-    if (!proposal) return
+ // app/chat/[id]/page.tsx 
+// 기존의 handleReportNoShow 함수를 아래와 같이 안전하게 전면 수정합니다.
 
-    // Update message status to no_show
-    proposal.status = 'no_show'
-    const newContent = `${INTERVIEW_PREFIX}${JSON.stringify(proposal)}`
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from('messages').update({ content: newContent }).eq('id', msg.id)
+const handleReportNoShow = async (msg: Message) => {
+  if (!user || !room) return
+  const proposal = parseProposal(msg.content)
+  if (!proposal) return
 
-    // Increment seeker's no_show_count (direct update since RPC not in types)
-    const { data: seekerProfile } = await supabase
-      .from('profiles')
-      .select('no_show_count')
-      .eq('id', room.seeker_id)
-      .maybeSingle()
-    const currentCount = (seekerProfile as unknown as { no_show_count: number } | null)?.no_show_count ?? 0
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from('profiles').update({ no_show_count: currentCount + 1 }).eq('id', room.seeker_id)
-
-    // Drop system notification message
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any).from('messages').insert({
-      chat_room_id: id as string,
-      sender_id: user.id,
-      content: 'System: 노쇼(No-Show)가 신고되었습니다.',
+  try {
+    // 백엔드 RPC 호출로 단일 트랜잭션 처리
+    const { data: success, error } = await supabase.rpc('report_seeker_no_show', {
+      p_message_id: msg.id,
+      p_seeker_id: room.seeker_id,
+      p_employer_id: user.id,
+      p_chat_room_id: id as string,
+      p_system_message_content: 'System: 노쇼(No-Show)가 신고되었습니다.'
     })
 
-    setShowNoShowConfirm(null)
-  }
+    if (error || !success) {
+      console.error('노쇼 신고 트랜잭션 실패:', error?.message)
+      alert('이미 처리되었거나 신고 중 오류가 발생했습니다.')
+      return
+    }
 
+    // 로컬 상태 동기화 (UI 업데이트)
+    proposal.status = 'no_show'
+    const newContent = `${INTERVIEW_PREFIX}${JSON.stringify(proposal)}`
+    
+    setMessages(prev => 
+      prev.map(m => m.id === msg.id ? { ...m, content: newContent } : m)
+    )
+
+    setShowNoShowConfirm(null)
+  } catch (err) {
+    console.error('네트워크 또는 클라이언트 오류:', err)
+  }
+}
   if (!room) {
     return (
       <div className="flex justify-center py-20">
