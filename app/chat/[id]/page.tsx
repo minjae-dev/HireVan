@@ -140,8 +140,18 @@ export default function ChatRoomPage() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  // 실시간 구독
+  // 실시간 구독 - 채널 ref를 사용하여 안전하게 정리
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null)
+
   useEffect(() => {
+    if (!id) return
+
+    // 이전 채널이 있다면 정리 (급격한 id 변경 시 대비)
+    if (channelRef.current) {
+      supabase.removeChannel(channelRef.current)
+      channelRef.current = null
+    }
+
     const channel = supabase
       .channel(`room:${id}`)
       .on(
@@ -195,7 +205,14 @@ export default function ChatRoomPage() {
       )
       .subscribe()
 
-    return () => { supabase.removeChannel(channel) }
+    channelRef.current = channel
+
+    return () => {
+      if (channelRef.current) {
+        supabase.removeChannel(channelRef.current)
+        channelRef.current = null
+      }
+    }
   }, [id])
 
   // 메시지 전송
