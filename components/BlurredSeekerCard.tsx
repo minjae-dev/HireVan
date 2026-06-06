@@ -148,9 +148,11 @@ export default function BlurredSeekerCard({
           <Field
             label="비자 만료"
             value={
-              seeker.visa_expiry
-                ? new Date(seeker.visa_expiry).toLocaleDateString('ko-KR')
-                : '—'
+              (seeker as Record<string, unknown>).visa_expiry_date
+                ? new Date((seeker as Record<string, unknown>).visa_expiry_date as string).toLocaleDateString('ko-KR')
+                : seeker.visa_expiry
+                  ? new Date(seeker.visa_expiry).toLocaleDateString('ko-KR')
+                  : '—'
             }
           />
           <Field
@@ -158,8 +160,12 @@ export default function BlurredSeekerCard({
             value={seeker.neighborhood ?? '—'}
           />
           <Field
-            label="영어"
-            value={seeker.english_level ? ENGLISH_LABEL[seeker.english_level] : '—'}
+            label="캐나다 내 근무 경력"
+            value={
+              typeof seeker.local_experience_months === 'number' && seeker.local_experience_months > 0
+                ? `${seeker.local_experience_months}개월`
+                : '—'
+            }
           />
 
           {/* Certificates — wide */}
@@ -185,6 +191,17 @@ export default function BlurredSeekerCard({
                     </span>
                   )
                 })}
+              </div>
+            ) : Array.isArray(seeker.available_shifts) && seeker.available_shifts.length > 0 ? (
+              <div className="flex flex-wrap gap-1">
+                {seeker.available_shifts.map(shift => (
+                  <span
+                    key={shift}
+                    className="rounded-md bg-white px-1.5 py-0.5 text-[10px] font-semibold text-gray-600 ring-1 ring-gray-200"
+                  >
+                    {shift}
+                  </span>
+                ))}
               </div>
             ) : (
               <p className="text-[11px] text-gray-400">미설정</p>
@@ -275,13 +292,6 @@ const VISA_LABEL: Record<string, string> = {
   permanent_resident: '영주권',
   citizen: '시민권',
   other: '기타',
-}
-
-const ENGLISH_LABEL: Record<string, string> = {
-  beginner: '초급',
-  intermediate: '중급',
-  advanced: '고급',
-  native: '원어민',
 }
 
 const DAY_LABEL: Record<string, string> = {
