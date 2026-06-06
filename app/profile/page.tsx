@@ -2,11 +2,13 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { useState, useEffect } from 'react'
+import { useAuth } from '@/lib/auth-context'
+import type { EmployerBillingStatus } from '@/lib/database.types'
+import { supabase } from '@/lib/supabase'
+import { usePollProUpgrade } from '@/lib/usePollProUpgrade'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useAuth } from '@/lib/auth-context'
-import { supabase } from '@/lib/supabase'
+import { useCallback, useEffect, useState } from 'react'
 
 type ReceivedReview = {
   id: string
@@ -39,6 +41,51 @@ export default function ProfilePage() {
   const [resumeLoading, setResumeLoading] = useState(true)
   const [resumeUploading, setResumeUploading] = useState(false)
   const [resumeError, setResumeError] = useState('')
+
+  // -----------------------------------------------------------------
+  // 결제 직후 Race Condition 방어 (웹후크 반영 대기)
+  // -----------------------------------------------------------------
+  //  Stripe success_url 이 /profile?upgrade=success&session_id=... 로
+  //  리다이렉트시키기 때문에 이 페이지에서도 동기화 방어가 필요하다.
+  //  usePollProUpgrade 훅이 프로필과 billing RPC 를
+  //  최대 5초간 폴링해서 pro_subscriber 플래그가 true 가 되기를 기다린다.
+  // -----------------------------------------------------------------
+  const poll = usePollProUpgrade({ manual: true })
+  const [billing, setBilling] = useState<EmployerBillingStatus | null>(null)
+  const [upgradeJustCompleted, setUpgradeJustCompleted] = useState(false)
+
+  const fetchBillingOnce = useCallback(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase as any).rpc('get_employer_billing_status')
+    if (data) setBilling(data as EmployerBillingStatus)
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    if (url.searchParams.get('upgrade') === 'success') {
+      // 1) 쿼리 파라미터 정리 (URL 깔끔하게)
+      url.searchParams.delete('upgrade')
+      url.searchParams.delete('session_id')
+      window.history.replaceState({}, '', url.toString())
+
+      // 2) 프로필 + billing 동기화
+      void refreshProfile()
+      void fetchBillingOnce()
+
+      // 3) 아직 webhook 미도달이면 폴링 시작
+      setUpgradeJustCompleted(true)
+      poll.start()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // 폴링이 종료될 때마다 billing 최신화
+  useEffect(() => {
+    if (poll.status === 'active' || poll.status === 'timeout') {
+      void fetchBillingOnce()
+    }
+  }, [poll.status, fetchBillingOnce])
 
   useEffect(() => {
     if (!loading && !user) {
@@ -119,12 +166,10 @@ export default function ProfilePage() {
 
     const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, '_')
     const filePath = `${user.id}/${Date.now()}-${safeName}`
-    
-    console.log('Uploading resume to:', filePath)
-    
+
     const { data: uploadData, error: uploadError } = await supabase.storage
       .from('resumes')
-      .upload(filePath, file, { 
+      .upload(filePath, file, {
         upsert: true,
         cacheControl: '3600',
       })
@@ -136,7 +181,7 @@ export default function ProfilePage() {
       event.target.value = ''
       return
     }
-    
+
     console.log('Upload successful:', uploadData)
 
     const { data: publicUrlData } = supabase.storage.from('resumes').getPublicUrl(filePath)
@@ -207,8 +252,58 @@ export default function ProfilePage() {
     ? Math.min(99, Math.max(18, 36.5 + (Number(averageRating) - 3) * 8)).toFixed(1)
     : '36.5'
 
+  // 폴링 상태 기반 UI 가시성
+  const remainingSec = Math.max(0, 5 - Math.ceil(poll.elapsedMs / 1000))
+  const showUpgradePending = poll.status === 'pending'
+  const showUpgradeTimeout = poll.status === 'timeout'
+
   return (
     <div>
+      {/* 결제 직후 동기화 배너 (race condition 방어) */}
+      {showUpgradePending && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="mb-4 flex items-center gap-3 rounded-2xl border border-orange-200 bg-gradient-to-r from-orange-50 to-pink-50 px-5 py-4"
+        >
+          <div className="h-6 w-6 flex-shrink-0 animate-spin rounded-full border-2 border-orange-400 border-t-transparent" />
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-gray-900">
+              ✨ 결제 확인 중… (최대 5초)
+            </p>
+            <p className="mt-0.5 text-xs text-gray-600">
+              Stripe가 구독 정보를 반영하는 중입니다. 보통 {remainingSec}초 안에 끝나요.
+            </p>
+          </div>
+        </div>
+      )}
+      {showUpgradeTimeout && (
+        <div
+          role="alert"
+          className="mb-4 flex flex-col gap-2 rounded-2xl border border-amber-300 bg-amber-50 px-5 py-4 sm:flex-row sm:items-center sm:gap-3"
+        >
+          <span className="text-2xl">⏰</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-bold text-amber-900">
+              결제가 완료되었는데 구독 상태가 아직 반영되지 않았어요.
+            </p>
+            <p className="mt-0.5 text-xs text-amber-800">
+              잠시 후 자동으로 다시 확인하거나, 아래 버튼을 눌러 수동으로 동기화할 수 있어요.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              void fetchBillingOnce()
+              poll.start()
+            }}
+            className="flex-shrink-0 rounded-full border border-amber-400 bg-white px-4 py-2 text-xs font-bold text-amber-700 transition-all active:scale-95"
+          >
+            🔄 다시 확인
+          </button>
+        </div>
+      )}
+
       <div className="bg-white rounded-2xl border border-gray-100 p-6 mb-4">
         <div className="flex items-center gap-4 mb-6">
           <div
@@ -356,8 +451,6 @@ export default function ProfilePage() {
           </label>
         </div>
       )}
-
-
 
       <div className="bg-white rounded-2xl border border-gray-100 p-5 mt-4">
         <div className="flex items-start justify-between gap-4 mb-5">

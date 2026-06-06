@@ -4,8 +4,8 @@
 
 import { useAuth } from '@/lib/auth-context'
 import type { Database } from '@/lib/database.types'
-import { supabase } from '@/lib/supabase'
 import { subscribeWithReconnect } from '@/lib/realtime'
+import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useCallback, useEffect, useRef, useState } from 'react'

@@ -4,9 +4,11 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
+    "dev:all": "concurrently \"npm run dev\" \"stripe listen --forward-to localhost:3000/api/stripe/webhook\"",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "check:webhook": "node scripts/check-stripe-webhook.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.107.0",
@@ -22,6 +24,7 @@
     "@types/node": "25.9.1",
     "@types/react": "19.2.16",
     "@types/react-dom": "^19",
+    "concurrently": "^9.2.1",
     "eslint": "^9",
     "eslint-config-next": "16.2.7",
     "tailwindcss": "^4",

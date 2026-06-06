@@ -8,10 +8,11 @@ import ProUpsellModal from '@/components/ProUpsellModal'
 import { useAuth } from '@/lib/auth-context'
 import type { Database, EmployerBillingStatus, PublicProfile } from '@/lib/database.types'
 import { supabase } from '@/lib/supabase'
+import { usePollProUpgrade } from '@/lib/usePollProUpgrade'
 import { useSeekerAccess } from '@/lib/useSeekerAccess'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 type JobPost = Database['public']['Tables']['job_posts']['Row']
 
@@ -51,6 +52,12 @@ export default function EmployerDashboardPage() {
   const [billing, setBilling] = useState<EmployerBillingStatus | null>(null)
   const [billingLoading, setBillingLoading] = useState(true)
 
+  const fetchBillingOnce = useCallback(async () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase as any).rpc('get_employer_billing_status')
+    if (data) setBilling(data as EmployerBillingStatus)
+  }, [])
+
   useEffect(() => {
     if (!user) return
     let cancelled = false
@@ -66,6 +73,19 @@ export default function EmployerDashboardPage() {
       cancelled = true
     }
   }, [user])
+
+  // ---------------------------------------------------------------------
+  // 결제 직후 Race Condition 방어
+  // ---------------------------------------------------------------------
+  const poll = usePollProUpgrade({ manual: true })
+  const [upgradeJustCompleted, setUpgradeJustCompleted] = useState(false)
+
+  // 폴링이 'active' / 'timeout' / 'error' 로 종료되면 billing 을 한 번 더 동기화
+  useEffect(() => {
+    if (poll.status === 'active' || poll.status === 'timeout') {
+      fetchBillingOnce()
+    }
+  }, [poll.status, fetchBillingOnce])
 
   // 내 구인글
   const [jobs, setJobs] = useState<JobPost[]>([])
@@ -101,7 +121,7 @@ export default function EmployerDashboardPage() {
   }, [jobs, selectedJobId])
 
   // ---------------------------------------------------------------------
-  // Seeker 브라우징 (FREE: blurred, PRO: profiles_public 그대로)
+  // Seeker 브라우징
   // ---------------------------------------------------------------------
   const [seekers, setSeekers] = useState<PublicProfile[]>([])
   const [seekersLoading, setSeekersLoading] = useState(false)
@@ -113,15 +133,12 @@ export default function EmployerDashboardPage() {
     setSeekersLoading(true)
     setSearched(true)
     try {
-      // profiles_public 뷰 사용 — 민감 정보(Stripe ID 등) 노출 방지
-      // RLS가 profiles_public에도 적용되므로 안전
       let query = supabase
         .from('profiles_public')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(30)
 
-      // 필터 조건 있을 때만 추가 (뷰에서 지원하는 컬럼만)
       if (filterNeighborhood) {
         query = query.eq('neighborhood', filterNeighborhood)
       }
@@ -141,7 +158,6 @@ export default function EmployerDashboardPage() {
         setSeekers([])
       } else {
         let list = (data as PublicProfile[]) ?? []
-        // 필터는 서버에서 적용 되었지만 클라이언트에서 한 번 더 보장
         if (filterNeighborhood) {
           list = list.filter(s => s.neighborhood === filterNeighborhood)
         }
@@ -155,16 +171,6 @@ export default function EmployerDashboardPage() {
     } finally {
       setSeekersLoading(false)
     }
-  }
-
-  // PRO 필터 가드: 자격증/지역 필터 같은 premium 필드 검색은
-  // PRO 구독자에게만 허용한다. FREE 가 사용 시 업셀 모달을 띄운다.
-  const requestProFilter = (featureLabel: string) => {
-    if (isPro) return false
-    setUpsellReason('pro_required')
-    setUpsellFeature(featureLabel)
-    setUpsellOpen(true)
-    return true
   }
 
   // 카드 클릭 → 상세 열람 (크레딧 차감)
@@ -191,11 +197,9 @@ export default function EmployerDashboardPage() {
   const isPro = !!billing?.pro_subscriber || !!billing?.grace_period_active
   const creditsRemaining = billing?.credit_count ?? 0
 
-  // 필터를 적용한 후 seeker를 "보유 자격증" 단위로 다시 매핑
   const filteredSeekers = useMemo(() => {
-    if (!filterCert) return seekers
     return seekers
-  }, [seekers, filterCert])
+  }, [seekers])
 
   // 인증 로딩
   if (authLoading || !user || !profile) {
@@ -226,18 +230,33 @@ export default function EmployerDashboardPage() {
         <GracePeriodBanner initialStatus={billing} />
       </header>
 
-      {/* 2. 결제/크레딧 상태 카드 */}
+      {/* 1.5 결제 직후 동기화 배너 */}
+      <UpgradePendingBanner
+        status={poll.status}
+        elapsedMs={poll.elapsedMs}
+        onRetry={() => {
+          fetchBillingOnce()
+          poll.start()
+        }}
+      />
+
+      {/* 2. 결제/크레딧 상태 카드 (취소 예약 로직 통합 완) */}
       <BillingSummary
         billing={billing}
         loading={billingLoading}
         isPro={isPro}
         creditsRemaining={creditsRemaining}
         onUpgraded={async () => {
-          // 결제 후 돌아왔을 때 webhook 이 plan 갱신 → 프로필 새로고침
           await refreshProfile()
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const { data } = await (supabase as any).rpc('get_employer_billing_status')
           if (data) setBilling(data as EmployerBillingStatus)
+          if ((data as EmployerBillingStatus | null)?.pro_subscriber) {
+            setUpgradeJustCompleted(true)
+          } else {
+            setUpgradeJustCompleted(true)
+            poll.start()
+          }
         }}
         onRequestUpgrade={() => {
           setUpsellReason('pro_required')
@@ -261,7 +280,7 @@ export default function EmployerDashboardPage() {
         }}
       />
 
-      {/* 4. 구직자 브라우저 (프리미엄 게이팅) */}
+      {/* 4. 구직자 브라우저 */}
       <section className="rounded-3xl border border-gray-100 bg-white p-6">
         <div className="mb-4 flex items-end justify-between gap-3">
           <div>
@@ -387,7 +406,7 @@ export default function EmployerDashboardPage() {
         )}
       </section>
 
-      {/* 5. PRO 업셀 모달 (전역에서 재사용) */}
+      {/* 5. PRO 업셀 모달 */}
       <ProUpsellModal
         open={upsellOpen}
         onClose={() => setUpsellOpen(false)}
@@ -435,7 +454,7 @@ function PlanBadge({
 }
 
 // ---------------------------------------------------------------------------
-// BillingSummary — 크레딧 / PRO 상태 요약 + 업그레이드 CTA
+// BillingSummary — 크레딧 / PRO 상태 요약 + 구독 만료 예약 UI 처리 완료
 // ---------------------------------------------------------------------------
 interface BillingSummaryProps {
   billing: EmployerBillingStatus | null
@@ -503,88 +522,98 @@ function BillingSummary({
     )
   }
 
-  // PRO 사용자
+  // PRO 사용자 분기 내부 로직 수정 완료
   if (isPro) {
     const formattedEndDate = billing?.subscription_ends_at
-      ? new Date(billing.subscription_ends_at).toLocaleDateString('ko-KR')
+      ? new Date(billing.subscription_ends_at).toLocaleDateString('ko-KR', { year: 'numeric', month: 'long', day: 'numeric' })
       : null
     
-    
-    const isScheduledToCancel = billing?.subscription_ends_at ? true : false;
+    // 💡 취소 여부 판별 가드 (Stripe webhook이 보낸 cancel_at_period_end가 참이거나 DB에 명시된 플래그 연동)
+    const isScheduledToCancel = !!billing?.cancel_at_period_end
 
     return (
-      <div className={`rounded-3xl border-2 p-6 ${
+      <div className={`rounded-3xl border-2 p-6 transition-all ${
         isScheduledToCancel
-          ? 'border-yellow-300 bg-gradient-to-br from-yellow-50 to-orange-50'
-          : 'border-orange-200 bg-gradient-to-br from-orange-50 to-pink-50'
+          ? 'border-amber-300 bg-gradient-to-br from-amber-50/70 via-orange-50/30 to-white'
+          : 'border-orange-200 bg-gradient-to-br from-orange-50/60 via-pink-50/20 to-white'
       }`}>
         <div className="flex flex-col gap-4">
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
-              <p className="text-xs font-bold uppercase tracking-wider text-orange-500">
-                HireVan PRO
-              </p>
+              <div className="flex items-center gap-2">
+                <p className="text-xs font-bold uppercase tracking-wider text-orange-500">
+                  HireVan PRO
+                </p>
+                {isScheduledToCancel && (
+                  <span className="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 animate-pulse">
+                    해지 예약됨
+                  </span>
+                )}
+              </div>
+              
               {isScheduledToCancel ? (
                 <>
-                  <h2 className="mt-1 text-lg font-extrabold text-gray-900">
-                    ⏳ 구독이 종료 예정이에요
+                  <h2 className="mt-1.5 text-lg font-extrabold text-gray-900 tracking-tight">
+                    ⏳ 멤버십이 곧 만료될 예정이에요
                   </h2>
                   <p className="mt-1 text-sm text-gray-600">
                     {formattedEndDate ? (
-                      <>서비스 이용 가능 기간: <strong>{formattedEndDate}</strong>까지</>
+                      <>이용 가능 기한: <strong className="text-amber-700 font-extrabold">{formattedEndDate}</strong>까지</>
                     ) : (
-                      '구독이 곧 종료됩니다.'
+                      '멤버십이 곧 종료됩니다.'
                     )}
                   </p>
-                  <p className="mt-1 text-xs text-yellow-700">
-                    해당일 이후 FREE 플랜으로 전환됩니다. 계속 PRO를 이용하려면 다시 구독해주세요.
+                  <p className="mt-1.5 text-xs font-medium text-amber-700/90 leading-relaxed">
+                    해당 날짜 이후에는 FREE 플랜으로 자동 전환되며, 더 이상 구직자 프로필을 무제한으로 열람할 수 없게 됩니다.
                   </p>
                 </>
               ) : (
                 <>
-                  <h2 className="mt-1 text-lg font-extrabold text-gray-900">
+                  <h2 className="mt-1.5 text-lg font-extrabold text-gray-900 tracking-tight">
                     🎉 PRO 플랜이 활성화되어 있어요
                   </h2>
                   <p className="mt-1 text-sm text-gray-600">
-                    모든 구직자 프로필을 무제한으로 열람할 수 있습니다.
+                    밴쿠버 모든 구직자 프로필을 제약 없이 무제한으로 열람할 수 있습니다.
                   </p>
                   {formattedEndDate && (
-                    <p className="mt-2 text-xs text-gray-500">
-                      다음 결제일: <strong>{formattedEndDate}</strong>
+                    <p className="mt-2 text-xs text-gray-500 font-medium">
+                      다음 정기 결제일: <strong className="text-gray-800 font-bold">{formattedEndDate}</strong>
                     </p>
                   )}
                 </>
               )}
             </div>
+
             {isScheduledToCancel ? (
               <button
                 type="button"
                 onClick={onRequestUpgrade}
-                className="flex-shrink-0 cursor-pointer rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-4 py-2 text-xs font-extrabold text-white shadow-md transition-all active:scale-95"
+                className="flex-shrink-0 cursor-pointer rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-4 py-2.5 text-xs font-extrabold text-white shadow-md shadow-orange-500/20 transition-all hover:opacity-90 active:scale-95"
               >
-                🔄 다시 구독하기
+                🔄 멤버십 유지하기
               </button>
             ) : (
               <button
                 type="button"
                 onClick={openBillingPortal}
                 disabled={openingPortal}
-                className="flex-shrink-0 rounded-full border border-orange-300 bg-white px-4 py-2 text-xs font-bold text-orange-600 transition-all active:scale-95 disabled:opacity-60"
+                className="flex-shrink-0 cursor-pointer rounded-full border border-orange-200 bg-white px-4 py-2 text-xs font-bold text-orange-600 hover:bg-orange-50/50 transition-all active:scale-95 disabled:opacity-60"
               >
                 {openingPortal ? '이동 중...' : '구독 관리'}
               </button>
             )}
           </div>
+
           {isScheduledToCancel && (
-            <div className="rounded-xl border border-yellow-200 bg-white/60 px-4 py-3">
-              <p className="text-xs font-medium text-gray-700">
-                아직 <strong>{formattedEndDate || '결제 기간'}</strong>까지 모든 PRO 기능을 이용할 수 있어요.
-                놓치지 않도록 지금 바로 다시 구독해보세요!
+            <div className="rounded-2xl border border-amber-200 bg-white/80 p-4 shadow-sm">
+              <p className="text-xs font-medium text-gray-700 leading-relaxed">
+                💡 걱정하지 마세요! 아직 <strong className="text-gray-900">{formattedEndDate || '이번 달 결제 기간'}</strong>까지는 현재의 모든 PRO 기능과 혜택을 끊김 없이 정상적으로 이용하실 수 있습니다. 혜택 유지를 원하시면 만료 전에 언제든 다시 구독을 재개해보세요.
               </p>
             </div>
           )}
+
           {portalError && (
-            <p className="rounded-xl bg-red-50 px-4 py-2 text-xs text-red-600">{portalError}</p>
+            <p className="rounded-xl bg-red-50 px-4 py-2 text-xs text-red-600 border border-red-100">{portalError}</p>
           )}
         </div>
       </div>
@@ -636,15 +665,73 @@ function BillingSummary({
 }
 
 // ---------------------------------------------------------------------------
+// UpgradePendingBanner — 결제 직후 webhook 동기화 대기 중 노출
+// ---------------------------------------------------------------------------
+import type { PollStatus as _PollStatus } from '@/lib/usePollProUpgrade'
+
+interface UpgradePendingBannerProps {
+  status: _PollStatus
+  elapsedMs: number
+  onRetry: () => void
+}
+
+function UpgradePendingBanner({ status, elapsedMs, onRetry }: UpgradePendingBannerProps) {
+  if (status === 'idle' || status === 'active' || status === 'error') return null
+
+  const remainingSec = Math.max(0, 5 - Math.ceil(elapsedMs / 1000))
+
+  if (status === 'pending') {
+    return (
+      <div
+        role="status"
+        aria-live="polite"
+        className="flex items-center gap-3 rounded-3xl border border-orange-200 bg-gradient-to-r from-orange-50 to-pink-50 px-5 py-4"
+      >
+        <div className="h-6 w-6 flex-shrink-0 animate-spin rounded-full border-2 border-orange-400 border-t-transparent" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-gray-900">
+            ✨ 결제 확인 중… (최대 5초)
+          </p>
+          <p className="mt-0.5 text-xs text-gray-600">
+            Stripe가 구독 정보를 반영하는 중입니다. 보통 {remainingSec}초 안에 끝나요.
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  if (status === 'timeout') {
+    return (
+      <div
+        role="alert"
+        className="flex flex-col gap-2 rounded-3xl border border-amber-300 bg-amber-50 px-5 py-4 sm:flex-row sm:items-center sm:gap-3"
+      >
+        <span className="text-2xl">⏰</span>
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-bold text-amber-900">
+            결제가 완료되었는데 구독 상태가 아직 반영되지 않았어요.
+          </p>
+          <p className="mt-0.5 text-xs text-amber-800">
+            잠시 후 자동으로 다시 확인하거나, 아래 버튼을 눌러 수동으로 동기화할 수 있어요.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRetry}
+          className="flex-shrink-0 rounded-full border border-amber-400 bg-white px-4 py-2 text-xs font-bold text-amber-700 transition-all active:scale-95"
+        >
+          🔄 다시 확인
+        </button>
+      </div>
+    )
+  }
+
+  return null
+}
+
+// ---------------------------------------------------------------------------
 // PreScreeningCard — PRO 전용: 사전 질문 & 필수 서류 설정
 // ---------------------------------------------------------------------------
-// FREE 사용자: 카드 전체가 블러 처리되고 클릭 시 업셀 모달 오픈.
-// PRO  사용자: 가장 최근 (또는 selectedJobId) 공고에 대해
-//   - 이력서 필수 토글 (job_posts.require_resume)
-//   - 사전 질문 추가/삭제 (job_posts.custom_questions)
-// 를 인라인에서 저장한다.
-// ---------------------------------------------------------------------------
-
 const MAX_QUESTIONS_PRO = 5
 
 interface PreScreeningCardProps {
@@ -681,18 +768,15 @@ function PreScreeningCard({
   onSelectJob,
   onRequireUpsell,
 }: PreScreeningCardProps) {
-  // 현재 편집 대상 공고
   const targetJob =
     jobs.find(j => j.id === selectedJobId) ?? jobs[0] ?? null
 
-  // 편집 상태
   const [requireResume, setRequireResume] = useState<boolean>(false)
   const [questions, setQuestions] = useState<string[]>([])
   const [saving, setSaving] = useState(false)
   const [savedAt, setSavedAt] = useState<number | null>(null)
   const [error, setError] = useState<string | null>(null)
 
-  // 대상 공고가 바뀌면 기존 값으로 초기화
   useEffect(() => {
     if (!targetJob) {
       setRequireResume(false)
@@ -714,7 +798,6 @@ function PreScreeningCard({
   }
 
   if (jobs.length === 0) {
-    // 공고가 하나도 없을 때 — 비어 있는 상태로도 카드는 보여준다
     return (
       <section className="rounded-3xl border-2 border-dashed border-orange-200 bg-gradient-to-br from-orange-50/60 to-pink-50/40 p-6">
         <div className="mb-3 flex items-center gap-2">
@@ -740,7 +823,6 @@ function PreScreeningCard({
     )
   }
 
-  // -------- FREE 사용자: 블러 + 업셀 CTA --------
   if (!isPro) {
     return (
       <section
@@ -764,7 +846,6 @@ function PreScreeningCard({
           </span>
         </div>
 
-        {/* 블러 미리보기 */}
         <div
           aria-hidden="true"
           className="pointer-events-none select-none rounded-2xl border border-dashed border-gray-200 bg-gray-50/60 p-4"
@@ -794,7 +875,6 @@ function PreScreeningCard({
           className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent via-white/40 to-white/90"
         />
 
-        {/* CTA: 업셀 모달 트리거 */}
         <div className="relative mt-4 flex flex-col items-center gap-2">
           <p className="text-center text-sm font-semibold text-gray-800">
             이 기능은 PRO 플랜에서 사용할 수 있어요.
@@ -812,12 +892,6 @@ function PreScreeningCard({
     )
   }
 
-  // -------- PRO 사용자: 실제 편집 가능한 폼 --------
-  // PRO 가드 헬퍼: FREE 사용자가 편집 컨트롤을 만지려 하면
-  //   1) 상태 토글을 막고
-  //   2) 즉시 업셀 모달을 띄운다.
-  // 카드 전체가 블러 처리되지만, 키보드 탭/SSR 상태 등으로
-  // 편집 영역이 잠깐 노출되는 경우를 막기 위한 방어 로직.
   const handleAddQuestion = () => {
     if (!isPro) {
       onRequireUpsell()
@@ -903,7 +977,6 @@ function PreScreeningCard({
         </Link>
       </div>
 
-      {/* 어떤 공고에 적용할지 선택 */}
       {jobs.length > 1 && (
         <div className="mb-4 flex flex-wrap gap-2">
           {jobs.map(job => (
@@ -934,7 +1007,6 @@ function PreScreeningCard({
             적용 대상: <span className="text-gray-800">{targetJob.title}</span>
           </p>
 
-          {/* 이력서 필수 토글 (✨PRO) */}
           <button
             type="button"
             onClick={handleToggleRequireResume}
@@ -970,7 +1042,6 @@ function PreScreeningCard({
             </span>
           </button>
 
-          {/* 사전 질문 리스트 */}
           <div className="rounded-2xl border border-gray-100 bg-white p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
@@ -1025,7 +1096,6 @@ function PreScreeningCard({
             )}
           </div>
 
-          {/* 저장 결과 */}
           {error && (
             <p className="rounded-xl bg-red-50 px-4 py-2.5 text-sm text-red-600">{error}</p>
           )}
