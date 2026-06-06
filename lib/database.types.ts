@@ -44,7 +44,7 @@ export type AvailabilityMatrix = Partial<{
 /**
  * 구직자의 희망 구직 조건 (seeker_preferences 테이블)
  */
-export interface SeekerPreferences {
+export type SeekerPreferences = {
   id: string
   seeker_id: string
   desired_categories: string[]
@@ -63,7 +63,7 @@ export interface SeekerPreferences {
 /**
  * match_jobs_to_seeker RPC 반환 결과
  */
-export interface JobMatchResult {
+export type JobMatchResult = {
   job_id: string
   title: string
   location: string
@@ -77,7 +77,7 @@ export interface JobMatchResult {
 /**
  * employer 대시보드에서 사용하는 billing 상태 객체 (RPC `get_employer_billing_status` 반환값).
  */
-export interface EmployerBillingStatus {
+export type EmployerBillingStatus = {
   ok: boolean
   reason?: 'unauthenticated' | 'not_employer'
   plan?: 'free' | 'pro'
@@ -95,7 +95,7 @@ export interface EmployerBillingStatus {
  * `view_seeker_profile` RPC의 반환값.
  * 성공 시 reason ∈ 'pro' | 'granted' | 'already_viewed', 실패 시 'no_credit' | 'unauthenticated' | ...
  */
-export interface ViewSeekerProfileResult {
+export type ViewSeekerProfileResult = {
   ok: boolean
   reason:
     | 'pro'
@@ -151,7 +151,7 @@ export type PublicProfile = {
  *   - spec 컬럼: seeker_id, name, match_score, neighborhood, certificates
  *   - backward-compat: matched_days, matched_certs, reason
  */
-export interface SeekerMatch {
+export type SeekerMatch = {
   seeker_id: string
   name: string
   match_score: number
