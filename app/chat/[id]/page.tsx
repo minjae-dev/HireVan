@@ -32,7 +32,7 @@ type InterviewProposal = {
 }
 
 const RATING_LABELS = ['', '아쉬웠어요', '조금 아쉬웠어요', '보통이에요', '좋았어요', '최고였어요']
-
+const MESSAGE_PAGE_SIZE = 30;
 const INTERVIEW_PREFIX = '[INTERVIEW_PROPOSAL]'
 const INTERVIEW_STATUSES = new Set<InterviewProposal['status']>([
   'pending',
@@ -446,6 +446,43 @@ export default function ChatRoomPage() {
     const newContent = `${INTERVIEW_PREFIX}${JSON.stringify(proposal)}`
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any).from('messages').update({ content: newContent }).eq('id', msg.id)
+  }
+
+  // 면접 제안 수락/거절 공통 핸들러 (중복 클릭 방지 포함)
+  const handleUpdateProposalStatus = async (msg: Message, nextStatus: 'confirmed' | 'declined') => {
+    if (proposalSubmitting === msg.id) return // 이미 처리 중이면 중복 클릭 차단
+    
+    const proposal = parseProposal(msg.content)
+    if (!proposal) return
+    
+    // pending 상태가 아니면 처리하지 않음 (이미 확정/거절된 경우)
+    if (proposal.status !== 'pending') return
+    
+    setProposalSubmitting(msg.id)
+    
+    try {
+      proposal.status = nextStatus
+      const newContent = `${INTERVIEW_PREFIX}${JSON.stringify(proposal)}`
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error } = await (supabase as any).from('messages').update({ content: newContent }).eq('id', msg.id)
+      
+      if (error) throw error
+      
+      // 수락인 경우 시스템 메시지 추가
+      if (nextStatus === 'confirmed' && user) {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        await (supabase as any).from('messages').insert({
+          chat_room_id: id as string,
+          sender_id: user.id,
+          content: 'System: 면접 일정이 확정되었습니다!',
+        })
+      }
+    } catch (err) {
+      console.error('면접 제안 상태 변경 실패:', err)
+      alert('상태 변경 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.')
+    } finally {
+      setProposalSubmitting(null)
+    }
   }
 
   // ── No-show reporting ──
