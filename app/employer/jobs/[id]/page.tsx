@@ -79,11 +79,11 @@ export default function EmployerJobDetailPage() {
 
       // Populate edit state from existing job
       setEditForm({
-        title: jobData.title,
-        location: jobData.location,
-        salary: jobData.salary,
-        work_hours: jobData.work_hours,
-        description: jobData.description,
+        title: jobData.title ?? '',
+        location: jobData.location ?? '',
+        salary: jobData.salary ?? '',
+        work_hours: jobData.work_hours ?? '',
+        description: jobData.description ?? '',
       })
       setEditRequireResume(jobData.require_resume ?? false)
       setEditQuestions(parseCustomQuestionsToStrings(jobData.custom_questions))
@@ -139,11 +139,11 @@ export default function EmployerJobDetailPage() {
   const handleEnterEdit = () => {
     if (!job) return
     setEditForm({
-      title: job.title,
-      location: job.location,
-      salary: job.salary,
-      work_hours: job.work_hours,
-      description: job.description,
+      title: job.title ?? '',
+      location: job.location ?? '',
+      salary: job.salary ?? '',
+      work_hours: job.work_hours ?? '',
+      description: job.description ?? '',
     })
     setEditRequireResume(job.require_resume ?? false)
     setEditQuestions(parseCustomQuestionsToStrings(job.custom_questions))

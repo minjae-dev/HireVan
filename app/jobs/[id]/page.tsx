@@ -564,7 +564,7 @@ export default function JobDetailPage() {
                           <p className="text-xs text-gray-400">{app.profiles.visa_type}</p>
                         )}
                         {(app.profiles?.no_show_count ?? 0) > 0 && (
-                          <p className="text-xs font-semibold text-red-500 mt-1">🚨 노쇼 이력 {app.profiles!.no_show_count}회</p>
+                          <p className="text-xs font-semibold text-red-500 mt-1">🚨 노쇼 이력 {app.profiles?.no_show_count ?? 0}회</p>
                         )}
                       </div>
                       <StatusBadge status={app.status} />
