@@ -34,11 +34,43 @@ type InterviewProposal = {
 const RATING_LABELS = ['', '아쉬웠어요', '조금 아쉬웠어요', '보통이에요', '좋았어요', '최고였어요']
 
 const INTERVIEW_PREFIX = '[INTERVIEW_PROPOSAL]'
+const INTERVIEW_STATUSES = new Set<InterviewProposal['status']>([
+  'pending',
+  'confirmed',
+  'declined',
+  'no_show',
+])
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
 function parseProposal(content: string): InterviewProposal | null {
   if (!content.startsWith(INTERVIEW_PREFIX)) return null
+
   try {
-    return JSON.parse(content.slice(INTERVIEW_PREFIX.length)) as InterviewProposal
+    const parsed: unknown = JSON.parse(content.slice(INTERVIEW_PREFIX.length))
+
+    if (!isPlainRecord(parsed)) return null
+
+    const { date, time, location, status } = parsed
+
+    if (
+      typeof date !== 'string' ||
+      typeof time !== 'string' ||
+      typeof location !== 'string' ||
+      typeof status !== 'string' ||
+      !INTERVIEW_STATUSES.has(status as InterviewProposal['status'])
+    ) {
+      return null
+    }
+
+    return {
+      date,
+      time,
+      location,
+      status: status as InterviewProposal['status'],
+    }
   } catch {
     return null
   }

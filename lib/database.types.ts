@@ -168,7 +168,7 @@ export type SeekerMatch = {
 /**
  * 알림 (notifications 테이블 + Realtime 페이로드).
  */
-export interface AppNotification {
+export type AppNotification = {
   id: string
   user_id: string
   type:
