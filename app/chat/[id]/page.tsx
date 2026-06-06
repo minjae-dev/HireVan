@@ -34,11 +34,44 @@ type InterviewProposal = {
 const RATING_LABELS = ['', '아쉬웠어요', '조금 아쉬웠어요', '보통이에요', '좋았어요', '최고였어요']
 
 const INTERVIEW_PREFIX = '[INTERVIEW_PROPOSAL]'
+const MESSAGE_PAGE_SIZE = 30
+const INTERVIEW_STATUSES = new Set<InterviewProposal['status']>([
+  'pending',
+  'confirmed',
+  'declined',
+  'no_show',
+])
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
 
 function parseProposal(content: string): InterviewProposal | null {
   if (!content.startsWith(INTERVIEW_PREFIX)) return null
+
   try {
-    return JSON.parse(content.slice(INTERVIEW_PREFIX.length)) as InterviewProposal
+    const parsed: unknown = JSON.parse(content.slice(INTERVIEW_PREFIX.length))
+
+    if (!isPlainRecord(parsed)) return null
+
+    const { date, time, location, status } = parsed
+
+    if (
+      typeof date !== 'string' ||
+      typeof time !== 'string' ||
+      typeof location !== 'string' ||
+      typeof status !== 'string' ||
+      !INTERVIEW_STATUSES.has(status as InterviewProposal['status'])
+    ) {
+      return null
+    }
+
+    return {
+      date,
+      time,
+      location,
+      status: status as InterviewProposal['status'],
+    }
   } catch {
     return null
   }
@@ -60,8 +93,16 @@ export default function ChatRoomPage() {
   const [comment, setComment] = useState('')
   const [submittingReview, setSubmittingReview] = useState(false)
   const [reviewError, setReviewError] = useState('')
+  const [isLoadingOlderMessages, setIsLoadingOlderMessages] = useState(false)
+  const [hasMoreMessages, setHasMoreMessages] = useState(true)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
+  const messagesContainerRef = useRef<HTMLDivElement>(null)
+  const topSentinelRef = useRef<HTMLDivElement>(null)
+  const isFetchingMessagesRef = useRef(false)
+  const previousScrollHeightRef = useRef<number | null>(null)
+  const previousScrollTopRef = useRef(0)
+  const shouldScrollToBottomRef = useRef(true)
 
   // ── Interview scheduling state ──
   const [showScheduleModal, setShowScheduleModal] = useState(false)
@@ -99,15 +140,64 @@ export default function ChatRoomPage() {
     setRoom(roomData)
   }, [id, router, user])
 
-  // 메시지 로드
-  const fetchMessages = useCallback(async () => {
-    const { data } = await supabase
+  // 메시지 로드: 최신 30개부터 가져오고, 상단 스크롤 시 더 오래된 메시지를 추가로 로드
+  const fetchMessagePage = useCallback(async (beforeCreatedAt?: string) => {
+    let query = supabase
       .from('messages')
       .select('*, profiles(name)')
       .eq('chat_room_id', id)
-      .order('created_at', { ascending: true })
-    setMessages((data as unknown as Message[]) ?? [])
+      .order('created_at', { ascending: false })
+      .range(0, MESSAGE_PAGE_SIZE - 1)
+
+    if (beforeCreatedAt) {
+      query = query.lt('created_at', beforeCreatedAt)
+    }
+
+    const { data } = await query
+    const page = ((data as unknown as Message[]) ?? []).reverse()
+    setHasMoreMessages(page.length === MESSAGE_PAGE_SIZE)
+
+    return page
   }, [id])
+
+  const fetchInitialMessages = useCallback(async () => {
+    isFetchingMessagesRef.current = true
+    shouldScrollToBottomRef.current = true
+
+    try {
+      const page = await fetchMessagePage()
+      setMessages(page)
+    } finally {
+      isFetchingMessagesRef.current = false
+    }
+  }, [fetchMessagePage])
+
+  const oldestMessageCreatedAt = messages[0]?.created_at
+
+  const loadOlderMessages = useCallback(async () => {
+    if (isFetchingMessagesRef.current || isLoadingOlderMessages || !hasMoreMessages || !oldestMessageCreatedAt) {
+      return
+    }
+
+    const container = messagesContainerRef.current
+    previousScrollHeightRef.current = container?.scrollHeight ?? null
+    previousScrollTopRef.current = container?.scrollTop ?? 0
+
+    isFetchingMessagesRef.current = true
+    setIsLoadingOlderMessages(true)
+
+    try {
+      const page = await fetchMessagePage(oldestMessageCreatedAt)
+      setMessages(prev => {
+        const seen = new Set(prev.map(message => message.id))
+        const olderMessages = page.filter(message => !seen.has(message.id))
+        return [...olderMessages, ...prev]
+      })
+    } finally {
+      setIsLoadingOlderMessages(false)
+      isFetchingMessagesRef.current = false
+    }
+  }, [fetchMessagePage, hasMoreMessages, isLoadingOlderMessages, oldestMessageCreatedAt])
 
   const fetchReviewStatus = useCallback(async () => {
     if (!user || !room?.interview_completed) {
@@ -126,19 +216,48 @@ export default function ChatRoomPage() {
   }, [id, room?.interview_completed, user])
 
   useEffect(() => {
+    setMessages([])
+    setHasMoreMessages(true)
     fetchRoom()
-    fetchMessages()
-  }, [fetchRoom, fetchMessages])
+    fetchInitialMessages()
+  }, [fetchRoom, fetchInitialMessages])
 
   // 후기 작성 여부 확인
   useEffect(() => {
     fetchReviewStatus()
   }, [fetchReviewStatus])
 
-  // 스크롤 아래로
+  // 스크롤 위치 유지: 과거 메시지를 prepend할 때는 현재 위치를 보존하고, 최신 메시지는 하단으로 이동
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    const container = messagesContainerRef.current
+    if (container && previousScrollHeightRef.current !== null) {
+      container.scrollTop = container.scrollHeight - previousScrollHeightRef.current + previousScrollTopRef.current
+      previousScrollHeightRef.current = null
+      return
+    }
+
+    if (shouldScrollToBottomRef.current) {
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
+    }
   }, [messages])
+
+  useEffect(() => {
+    const container = messagesContainerRef.current
+    const sentinel = topSentinelRef.current
+    if (!container || !sentinel) return
+
+    const observer = new IntersectionObserver(
+      entries => {
+        if (entries[0]?.isIntersecting) {
+          loadOlderMessages()
+        }
+      },
+      { root: container, rootMargin: '80px 0px 0px 0px' },
+    )
+
+    observer.observe(sentinel)
+    return () => observer.disconnect()
+  }, [loadOlderMessages])
 
   // 실시간 구독
   useEffect(() => {
@@ -158,7 +277,16 @@ export default function ChatRoomPage() {
             .select('*, profiles(name)')
             .eq('id', payload.new.id)
             .maybeSingle()
-          if (data) setMessages(prev => [...prev, data as unknown as Message])
+          if (data) {
+            const msg = data as unknown as Message
+            const container = messagesContainerRef.current
+            const distanceFromBottom = container
+              ? container.scrollHeight - container.scrollTop - container.clientHeight
+              : 0
+            shouldScrollToBottomRef.current = msg.sender_id === user?.id || distanceFromBottom < 120
+
+            setMessages(prev => prev.some(message => message.id === msg.id) ? prev : [...prev, msg])
+          }
         },
       )
       .on(
@@ -196,7 +324,7 @@ export default function ChatRoomPage() {
       .subscribe()
 
     return () => { supabase.removeChannel(channel) }
-  }, [id])
+  }, [id, user?.id])
 
   // 메시지 전송
   const handleSend = async (e: React.FormEvent) => {
@@ -449,7 +577,13 @@ export default function ChatRoomPage() {
       )}
 
       {/* ── 메시지 영역 ── */}
-      <div className="flex-1 overflow-y-auto bg-gray-50 px-4 py-4 flex flex-col gap-2">
+      <div ref={messagesContainerRef} className="flex-1 overflow-y-auto bg-gray-50 px-4 py-4 flex flex-col gap-2">
+        <div ref={topSentinelRef} aria-hidden="true" />
+        {isLoadingOlderMessages && (
+          <div className="flex justify-center py-2">
+            <div className="w-5 h-5 border-2 border-orange-300 border-t-transparent rounded-full animate-spin" />
+          </div>
+        )}
         {messages.length === 0 && (
           <div className="text-center text-sm text-gray-400 py-10">
             <p className="text-3xl mb-2">👋</p>
