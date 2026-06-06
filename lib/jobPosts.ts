@@ -193,7 +193,15 @@ export function parseJobDescription(description: string | null | undefined): Par
 
   const cleanDescription = raw
     .replace(/\[이력서필수\]\s*/g, '')
-    .replace(/\[마감:[^\]    .replace(/\[마감:[^\]    .replace(/\[마감:[^\]    .replace(/\[마감:[^\]    .re*/g    .replace(/\[마감:[^\]    .replace(/\[마감:[^\]    .replace(/\[마감:[^\]    .repcustomQuestions: legacyQuestions,
+    .replace(/\[마감:[^\]]*\]\s*/g, '')
+    .replace(/\[사전질문\][\s\S]*$/, '')
+    .replace(/\[([^\]]+)\]\s*/g, '')
+    .trim()
+
+  return {
+    cleanDescription,
+    requireResume: resumeMarker,
+    customQuestions: legacyQuestions,
     deadline: deadlineMatch ? deadlineMatch[1] : null,
     hasLegacyMarkers: resumeMarker || !!deadlineMatch || !!pregMatch,
   }
@@ -202,6 +210,12 @@ export function parseJobDescription(description: string | null | undefined): Par
 /**
  * custom_questions 컬럼(우선) + description legacy 마커를 합쳐서 최종 질문 목록 반환.
  */
-export function resolveCustomQexport function resolveCustomQexpodescription: string | null | undefined,
-): { id: string; qu): { id: string; qu): { id: string; qu): { id: string; qu): { id: string; qro): { id: string; qu): { id: string; qu): { id: string; Description(description).customQuestions
+export function resolveCustomQuestions(
+  customQuestions: { id: string; question: string }[] | null | undefined,
+  description: string | null | undefined,
+): { id: string; question: string }[] {
+  if (Array.isArray(customQuestions) && customQuestions.length > 0) {
+    return customQuestions
+  }
+  return parseJobDescription(description).customQuestions
 }
