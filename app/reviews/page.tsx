@@ -9,6 +9,7 @@ type Review = {
   comment: string
   created_at: string
   reviewer: { name: string; role: string } | null
+  reviewee: { name: string; role: string } | null
 }
 
 export default function ReviewsPage() {
@@ -30,7 +31,8 @@ export default function ReviewsPage() {
         .from('reviews')
         .select(`
           id, rating, comment, created_at,
-          reviewer:profiles!reviews_reviewer_id_fkey(name, role)
+          reviewer:profiles!reviews_reviewer_id_fkey(name, role),
+          reviewee:profiles!reviews_reviewee_id_fkey(name, role)
         `)
         .eq('reviewee_id', user.id) // 내 ID와 일치하는 리뷰만 조회
         .order('created_at', { ascending: false })
