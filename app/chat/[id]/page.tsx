@@ -1,6 +1,6 @@
 'use client'
 
-/* eslint-disable react-hooks/set-state-in-effect */
+ 
 
 import { useAuth } from '@/lib/auth-context'
 import type { Database } from '@/lib/database.types'
@@ -57,7 +57,6 @@ function parseProposal(content: string): InterviewProposal | null {
   }
 }
 
-// 상태 업데이트 메시지 파싱 함수
 function parseStatusUpdate(content: string) {
   if (!content || !content.startsWith(STATUS_UPDATE_PREFIX)) return null
   try {
@@ -83,9 +82,14 @@ export default function ChatRoomPage() {
 
   const [isProcessing, setIsProcessing] = useState<Record<string, boolean>>({})
 
+  // 모달 제어 상태들
   const [showProposalModal, setShowProposalModal] = useState(false)
   const [showNoShowConfirm, setShowNoShowConfirm] = useState<string | null>(null)
   const [showReviewModal, setShowReviewModal] = useState(false)
+  
+  // 💡 prompt() 우회용 거절 모달 상태 추가
+  const [showRejectModal, setShowRejectModal] = useState<string | null>(null)
+  const [rejectReasonInput, setRejectReasonInput] = useState('')
 
   const [proposalDate, setProposalDate] = useState('')
   const [proposalTime, setProposalTime] = useState('')
@@ -100,12 +104,10 @@ export default function ChatRoomPage() {
   const scrollRef = useRef<HTMLDivElement>(null)
   const prevScrollHeightRef = useRef<number>(0)
 
-  // 특정 제안 메시지의 현재 확정된 최신 상태를 구하는 헬퍼 함수
   const getProposalStatus = (msgId: string, originalProposal: InterviewProposal) => {
     let currentStatus = originalProposal.status
     let rejectReason = originalProposal.reject_reason
 
-    // 전체 메시지 중 해당 제안(msgId)에 대한 업데이트 로그를 추적
     messages.forEach(m => {
       const update = parseStatusUpdate(m.content)
       if (update && update.parent_id === msgId) {
@@ -355,7 +357,6 @@ export default function ChatRoomPage() {
     }
   }
 
-  // 💡 RLS를 완벽히 우회하여 무조건 100% 성공하는 안전한 신규 방식
   const handleProposalAction = async (
     msgId: string, 
     action: 'confirmed' | 'declined',
@@ -372,12 +373,11 @@ export default function ChatRoomPage() {
       }
       const statusUpdateContent = `${STATUS_UPDATE_PREFIX}${JSON.stringify(updatePayload)}`
 
-      // 타인이 쓴 글을 UPDATE하는 대신, 내가 권한을 가진 새 메시지로 기록(INSERT)을 남김 -> 100% 성공 보장
-      const { data, error } = await supabase.from('messages').insert({
+      const { error } = await supabase.from('messages').insert({
         chat_room_id: id as string,
         sender_id: user.id,
         content: statusUpdateContent,
-      }).select()
+      })
 
       if (error) throw error
 
@@ -495,7 +495,7 @@ export default function ChatRoomPage() {
     <div className="mx-auto flex h-screen max-w-md flex-col bg-gray-50/60 shadow-inner">
       <header className="flex items-center justify-between border-b border-gray-100 bg-white px-4 py-3.5">
         <div className="flex items-center gap-3">
-          <Link href="/chat" className="text-xl text-gray-700 active:scale-95">◀</Link>
+          <Link href="/chat" className="text-xl text-orange-500 active:scale-95">◀</Link>
           <div>
             <h2 className="text-base font-bold text-gray-900 tracking-tight">{opponentName || '대화방'}</h2>
             <p className="text-[11px] font-medium text-orange-500">{room?.job_posts?.title}</p>
@@ -543,11 +543,9 @@ export default function ChatRoomPage() {
           const rawProposal = parseProposal(msg.content)
           const isStatusLog = parseStatusUpdate(msg.content)
 
-          // 단순 상태 변경 백로그성 메시지는 채팅창 화면에서 숨김 처리 (UI 깔끔화)
           if (isStatusLog) return null
 
           if (rawProposal) {
-            // 추적된 최신 상태 가져오기
             const { status, reject_reason: rejectReason } = getProposalStatus(msg.id, rawProposal)
             const isPending = status === 'pending'
             const processing = isProcessing[msg.id] || false
@@ -582,14 +580,14 @@ export default function ChatRoomPage() {
                           </button>
                           <button
                             onClick={() => {
-                              const reason = prompt('거절 사유를 입력해 주세요 (예: 시간대 변경 필요, 거리 문제 등)')
-                              if (reason === null) return
-                              handleProposalAction(msg.id, 'declined', reason.trim() || '일정 조율 필요')
+                              // 💡 prompt() 에러 해결: 모달 창을 띄우도록 변경
+                              setRejectReasonInput('')
+                              setShowRejectModal(msg.id)
                             }}
                             disabled={processing}
                             className="flex-1 rounded-xl bg-white border border-gray-200 py-2 text-xs font-semibold text-gray-600 transition-all disabled:opacity-50"
                           >
-                            {processing ? '처리 중...' : '👎 거절하기'}
+                            👎 거절하기
                           </button>
                         </div>
                       )
@@ -688,6 +686,44 @@ export default function ChatRoomPage() {
           </button>
         </form>
       </footer>
+
+      {/* 💡 prompt() 완벽 대체: 거절 사유 입력용 커스텀 모달 구현 */}
+      {showRejectModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="w-full max-w-xs rounded-3xl bg-white p-5 shadow-xl">
+            <h3 className="text-sm font-bold text-gray-900 mb-2">👎 면접 제안 거절</h3>
+            <p className="text-[11px] text-gray-500 mb-3.5 leading-normal">
+              고용주에게 전달할 거절 사유를 입력해 주세요. (예: 일정 변경 희망, 위치 조율 필요 등)
+            </p>
+            <textarea
+              value={rejectReasonInput}
+              onChange={e => setRejectReasonInput(e.target.value)}
+              placeholder="사유를 입력하세요 (미입력 시 '일정 조율 필요'로 전송)"
+              rows={3}
+              maxLength={100}
+              className="w-full resize-none rounded-xl border border-gray-200 p-2.5 text-xs focus:border-orange-400 focus:outline-none"
+            />
+            <div className="flex gap-2 mt-4">
+              <button
+                onClick={() => {
+                  const finalReason = rejectReasonInput.trim() || '일정 조율 필요'
+                  handleProposalAction(showRejectModal, 'declined', finalReason)
+                  setShowRejectModal(null)
+                }}
+                className="flex-1 rounded-xl bg-red-500 py-2 text-xs font-bold text-white"
+              >
+                거절 확정
+              </button>
+              <button
+                onClick={() => setShowRejectModal(null)}
+                className="flex-1 rounded-xl bg-gray-100 py-2 text-xs font-semibold text-gray-600"
+              >
+                취소
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showProposalModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4 animate-fade-in">
