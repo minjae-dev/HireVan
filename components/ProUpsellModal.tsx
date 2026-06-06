@@ -33,12 +33,12 @@ const REASON_COPY: Record<NonNullable<ProUpsellModalProps['reason']>, {
   no_credit: {
     title: '웰컴 크레딧을 모두 사용했어요',
     subtitle: '추가 구직자 프로필을 열람하려면 PRO 플랜이 필요해요.',
-    highlight: '월 $49 (CAD) · 언제든 해지 가능',
+    highlight: '월 $29 (CAD) · 언제든 해지 가능',
   },
   pro_required: {
     title: 'PRO 플랜 전용 기능이에요',
     subtitle: '스케줄 / 자격증 매칭 검색은 PRO 구독자에게만 제공됩니다.',
-    highlight: '월 $49 (CAD) · 14일 무료 체험',
+    highlight: '월 $29 (CAD) · 14일 무료 체험',
   },
   payment_failed: {
     title: '결제 처리에 실패했어요',
@@ -48,7 +48,7 @@ const REASON_COPY: Record<NonNullable<ProUpsellModalProps['reason']>, {
   unknown: {
     title: 'PRO 플랜 구독이 필요해요',
     subtitle: 'HireVan PRO와 함께 더 많은 구직자를 만나보세요.',
-    highlight: '월 $49 (CAD) · 언제든 해지 가능',
+    highlight: '월 $29 (CAD) · 언제든 해지 가능',
   },
 }
 
@@ -208,7 +208,7 @@ export default function ProUpsellModal({
 
         {/* Price */}
         <div className="mt-6 flex items-baseline gap-1.5">
-          <span className="text-3xl font-extrabold text-gray-900">$49</span>
+          <span className="text-3xl font-extrabold text-gray-900">$29</span>
           <span className="text-sm font-medium text-gray-500">CAD / 월</span>
         </div>
         <p className="mt-1 text-xs font-medium text-orange-600">{copy.highlight}</p>

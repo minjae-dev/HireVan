@@ -8,53 +8,19 @@ export const dynamic = 'force-dynamic'
 
 /**
  * POST /api/stripe/checkout
- *
- * Creates a Stripe Checkout Session in subscription mode for the monthly
- * PRO plan and returns the session URL. The browser will redirect the
- * user to Stripe's hosted checkout page; on success they come back to
- * `/profile?upgrade=success` and the webhook flips `profiles.plan` to 'pro'.
- *
- * Body: { priceId?: string, returnTo?: string }
- *        - priceId defaults to STRIPE_PRICE_ID env var.
- *        - returnTo is reflected back into success_url so the user lands
- *          on the right page after paying.
- *
- * Auth: requires a valid Supabase session — supplied via either
- *   1) `Authorization: Bearer <access_token>` header (recommended), OR
- *   2) `sb-access-token` cookie (legacy), OR
- *   3) any `sb-<ref>-auth-token*` chunked cookie (Supabase SSR default).
- *
- * The route uses the **service role** Supabase client (via
- * `getSupabaseAdmin()`) to verify the user — this is required because
- * `auth.getUser(jwt)` does not work with the anon key on the server.
- * Service role also bypasses RLS for reading the caller's `profiles` row.
- *
- * Error handling
- *   The whole handler is wrapped in a top-level `try { ... } catch` so
- *   that ANY unhandled exception (bad env vars, type errors, Supabase
- *   outages, Stripe API hiccups, JSON.parse failures, etc.) is caught
- *   and surfaced as a clean JSON error response. The server process
- *   must never crash because of a single bad checkout call.
  */
 export async function POST(request: NextRequest) {
   try {
     // -------------------------------------------------------------------------
-    // 1. Env-var resolution (Stripe secret + price id)
+    // 1. Env-var & Secret Key Resolution (모드 선택 섹션)
     // -------------------------------------------------------------------------
-    const secret =
-      process.env.STRIPE_SECRET_KEY ?? process.env.STRIPE_API_KEY ?? ''
+    
+    // 👉 [A] 실제 운영 모드 (기본 활성화: 환경 변수에서 sk_live 키를 읽어옵니다)
+    const secret = process.env.STRIPE_SECRET_KEY ?? process.env.STRIPE_API_KEY ?? ''
 
-    // Accepts the canonical STRIPE_PRICE_ID plus common aliases. In dev we
-    // fall back to a sentinel so the UI can still render and the developer
-    // sees a clear warning; in production we still 503 to surface the
-    // misconfiguration. Stripe will reject the sentinel value anyway, so
-    // it can't accidentally create a real session.
-    const defaultPriceId =
-      process.env.STRIPE_PRICE_ID ??
-      process.env.NEXT_PUBLIC_STRIPE_PRICE_ID ??
-      process.env.STRIPE_PRO_PRICE_ID ??
-      process.env.STRIPE_PRICE ??
-      (process.env.NODE_ENV !== 'production' ? 'price_dev_fallback_set_in_env' : '')
+    // 👉 [B] 로컬/실서버 1달러 강제 테스트 모드 (필요할 때 아래 라인의 주역을 해제하세요)
+    // const secret = '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'.trim()
+
 
     if (!secret) {
       console.error('[stripe/checkout] STRIPE_SECRET_KEY is not set')
@@ -64,19 +30,8 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    if (!defaultPriceId) {
-      console.error(
-        '[stripe/checkout] Stripe price ID is not configured. ' +
-          'Set STRIPE_PRICE_ID (or NEXT_PUBLIC_STRIPE_PRICE_ID / STRIPE_PRO_PRICE_ID).',
-      )
-      return NextResponse.json(
-        { error: 'Stripe price ID is not configured.' },
-        { status: 503 },
-      )
-    }
-
     // -------------------------------------------------------------------------
-    // 2. Resolve the caller's access token (header → cookie → chunked cookies)
+    // 2. Resolve the caller's access token
     // -------------------------------------------------------------------------
     const accessToken = extractAccessToken(request)
     if (!accessToken) {
@@ -90,26 +45,17 @@ export async function POST(request: NextRequest) {
     // -------------------------------------------------------------------------
     // 3. Verify the user via service-role client
     // -------------------------------------------------------------------------
-    // `getSupabaseAdmin()` reads SUPABASE_SERVICE_ROLE_KEY (see
-    // `lib/supabase-admin.ts`). If the env var is missing or malformed
-    // it returns `null`. Rather than crashing the route, we surface a
-    // structured 500 with a developer-actionable log line so the on-call
-    // engineer knows exactly which key to set.
     let supabase: ReturnType<typeof getSupabaseAdmin>
     try {
       supabase = getSupabaseAdmin()
     } catch (err) {
-      console.error(
-        '🚨 Supabase admin client unavailable. Check your Service Role Key.',
-        err,
-      )
+      console.error('🚨 Supabase admin client unavailable.', err)
       return NextResponse.json(
         { error: '서버 내부 권한 설정 오류' },
         { status: 500 },
       )
     }
     if (!supabase) {
-      console.error('🚨 Supabase admin client unavailable. Check your Service Role Key.')
       return NextResponse.json(
         { error: '서버 내부 권한 설정 오류' },
         { status: 500 },
@@ -119,20 +65,12 @@ export async function POST(request: NextRequest) {
     const { data: userData, error: userErr } = await supabase.auth.getUser(accessToken)
     const user = userData?.user
     if (userErr || !user) {
-      console.warn(
-        '[stripe/checkout] Invalid session:',
-        userErr?.message ?? 'no user',
-      )
       return NextResponse.json({ error: 'Invalid session' }, { status: 401 })
     }
 
     // -------------------------------------------------------------------------
-    // 4. Look up the caller's profile (service role bypasses RLS)
+    // 4. Look up the caller's profile
     // -------------------------------------------------------------------------
-    // The type assertion keeps the strict Supabase generic inference happy
-    // (the v2 client sometimes narrows `data` to `never` when the select
-    // string is non-empty) and gives us a precise shape for the rest of
-    // the function.
     type ProfileRow = Pick<
       Database['public']['Tables']['profiles']['Row'],
       'id' | 'role' | 'plan' | 'stripe_customer_id'
@@ -144,7 +82,6 @@ export async function POST(request: NextRequest) {
       .maybeSingle()
 
     if (profileErr) {
-      console.error('[stripe/checkout] Profile lookup failed:', profileErr.message)
       return NextResponse.json(
         { error: 'Failed to load profile.' },
         { status: 500 },
@@ -159,30 +96,59 @@ export async function POST(request: NextRequest) {
     }
 
     // -------------------------------------------------------------------------
-    // 5. Parse optional priceId and returnTo from the body
+    // 5. Price ID Routing (테스트용 vs 실제용 분기점)
     // -------------------------------------------------------------------------
-    let priceId = process.env.STRIPE_PRO_PRICE_ID || 'price_dev_fallback_set_in_env';
+    let priceId = ''
     let returnTo: string | null = null
+
+    // -------------------------------------------------------------------------
+    // 💡 [방법 1] 1달러 라이브 테스트 모드로 진행하고 싶을 때 (현재 활성화)
+    // -------------------------------------------------------------------------
+    priceId = 'price_1TfRlUDamweJ0Z1TXoXROtxX' // 방금 생성한 1달러 제품 번호
+
+    // -------------------------------------------------------------------------
+    // 💡 [방법 2] 실제 유저 결제용 $29 PRO 모드로 배포할 때 
+    //            (실제 서비스 출시 시 아래 주석들을 해제하고 위의 방법 1을 주석 처리하세요)
+    // -------------------------------------------------------------------------
+    /*
+    const defaultPriceId =
+      process.env.STRIPE_PRICE_ID ??  
+      process.env.NEXT_PUBLIC_STRIPE_PRICE_ID ??
+      process.env.STRIPE_PRO_PRICE_ID
+      
+    priceId = defaultPriceId ?? ''
+    */
+
     try {
       const body = (await request.json().catch(() => ({}))) as {
         priceId?: string
         returnTo?: string
       }
-      if (body.priceId && body.priceId.startsWith('price_')) {
+      
+      // 실제 배포 모드일 때만 프론트엔드가 보낸 유효한 priceId 커스텀 매핑을 허용합니다.
+      // (1달러 고정 테스트 모드일 때는 프론트엔드 값에 상관없이 무조건 1달러 플랜 적용)
+      if (body.priceId && body.priceId.startsWith('price_') && priceId !== 'price_1TfRlUDamweJ0Z1TXoXROtxX') {
         priceId = body.priceId
       }
       if (typeof body.returnTo === 'string' && body.returnTo.startsWith('/')) {
         returnTo = body.returnTo
       }
     } catch {
-      // body was empty / unparseable - fall through with defaults
+      // body 파싱 오류 예방
+    }
+
+    // 최종 검증 보호 로직
+    if (!priceId || priceId.startsWith('price_dev_fallback')) {
+      console.error('[stripe/checkout] Valid Stripe price ID is missing.')
+      return NextResponse.json(
+        { error: 'Stripe 가격 설정(Price ID)이 누락되었거나 올바르지 않습니다.' },
+        { status: 503 },
+      )
     }
 
     // -------------------------------------------------------------------------
     // 6. Initialise Stripe
     // -------------------------------------------------------------------------
-    // The cast is needed because Stripe's bundled API version constant is a
-    // private type union; pinning to a known version avoids breaking changes.
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const stripe = new Stripe(secret, { apiVersion: '2024-12-18.acacia' as any })
 
@@ -195,8 +161,6 @@ export async function POST(request: NextRequest) {
     const cancelUrl = `${origin}${basePath}?upgrade=cancel`
 
     try {
-      // Idempotency key: 중복 결제 세션 생성을 방지한다.
-      // 같은 userId + timestamp 조합으로 한 번만 생성되도록 보장한다.
       const idempotencyKey = `checkout_${user.id}_${Date.now()}`
       
       const session = await stripe.checkout.sessions.create({
@@ -229,14 +193,8 @@ export async function POST(request: NextRequest) {
       )
     }
   } catch (err) {
-    // -----------------------------------------------------------------------
-    // OUTER GUARD — catch ANY unhandled error so the route handler never
-    // throws. Surfacing a clean 500 prevents the Next.js dev overlay from
-    // showing up and gives the frontend a structured payload.
-    // -----------------------------------------------------------------------
     const message = err instanceof Error ? err.message : 'Unknown error'
-    const stack = err instanceof Error ? err.stack : undefined
-    console.error('[stripe/checkout] Unhandled error:', message, stack)
+    console.error('[stripe/checkout] Unhandled error:', message)
     return NextResponse.json(
       { error: 'Stripe 세션 생성에 실패했습니다.' },
       { status: 500 },
@@ -247,39 +205,22 @@ export async function POST(request: NextRequest) {
 // -----------------------------------------------------------------------------
 // Helpers
 // -----------------------------------------------------------------------------
-
-/**
- * Pulls the caller's Supabase access token from the request. Order of
- * preference:
- *   1) `Authorization: Bearer <token>` header (set by the client)
- *   2) `sb-access-token` cookie (legacy single-cookie format)
- *   3) `sb-<ref>-auth-token` cookie (single chunk, base64-encoded JSON)
- *   4) `sb-<ref>-auth-token.0`, `.1`, … chunked cookies
- */
 function extractAccessToken(request: NextRequest): string | null {
-  // 1) Authorization header — case-insensitive "Bearer" prefix
   const authHeader = request.headers.get('authorization')
   if (authHeader) {
     const match = authHeader.match(/^Bearer\s+(.+)$/i)
     if (match) return match[1].trim()
   }
 
-  // 2) Legacy single cookie name
   const legacy = request.cookies.get('sb-access-token')?.value
   if (legacy) return legacy
 
-  // 3 & 4) Supabase chunked cookies: `sb-<ref>-auth-token` (single) and
-  // `sb-<ref>-auth-token.0`, `.1`, … (chunked when the JWT is large).
   const cookies = request.cookies.getAll()
   const sbCookies = cookies
     .filter(c => /^sb-.+-auth-token(\.\d+)?$/.test(c.name))
     .sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }))
 
   if (sbCookies.length === 0) return null
-
-  // Supabase stores the session as `base64(JSON.stringify({...}))`. The
-  // chunked form is a list of base64 chunks that need to be concatenated
-  // in numeric order. For the single-cookie form there is just one entry.
   const joined = sbCookies.map(c => c.value).join('')
 
   try {
@@ -290,7 +231,6 @@ function extractAccessToken(request: NextRequest): string | null {
     }
     return parsed.access_token ?? parsed.currentSession?.access_token ?? null
   } catch {
-    // Maybe the cookie value is the raw JWT — try it directly.
     if (joined.split('.').length === 3) return joined
     return null
   }

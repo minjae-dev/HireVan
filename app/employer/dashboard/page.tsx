@@ -354,7 +354,7 @@ export default function EmployerDashboardPage() {
               구직자 상세 프로필을 열어볼 수 있어요.
             </p>
             <p className="mt-1 text-xs text-gray-500">
-              그 이상은 PRO 플랜 ($49/월)에서 무제한으로 제공됩니다.
+              그 이상은 PRO 플랜 ($29/월)에서 무제한으로 제공됩니다.
             </p>
             <button
               type="button"
@@ -886,7 +886,7 @@ function PreScreeningCard({
           >
             ✨ PRO로 업그레이드하고 사용하기
           </button>
-          <p className="text-[11px] text-gray-400">월 $49 · 사전 질문 5개까지 · 이력서 필터</p>
+          <p className="text-[11px] text-gray-400">월 $29 · 사전 질문 5개까지 · 이력서 필터</p>
         </div>
       </section>
     )
