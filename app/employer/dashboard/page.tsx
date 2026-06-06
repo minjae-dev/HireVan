@@ -19,15 +19,13 @@ type JobPost = Database['public']['Tables']['job_posts']['Row']
 // 필터 옵션 (한국 밴쿠버 채용 시장 기준)
 // ---------------------------------------------------------------------------
 const NEIGHBORHOOD_OPTIONS = [
-  'Downtown',
-  'Burnaby',
-  'Kitsilano',
-  'Gastown',
-  'Yaletown',
-  'Metrotown',
-  'Richmond',
-  'North Van',
-  'Surrey',
+  '다운타운',
+  '버나비',
+  '서리',
+  '코퀴틀람',
+  '리치몬드',
+  '노스밴쿠버',
+  '기타',
 ] as const
 
 const CERT_OPTIONS = [
@@ -114,17 +112,30 @@ export default function EmployerDashboardPage() {
   const fetchSeekers = async () => {
     setSeekersLoading(true)
     setSearched(true)
-    try {
-      // profiles_public 뷰 → RLS가 자동으로 권한에 따라 NULL 마스킹
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const query = (supabase as any)
-        .from('profiles_public')
-        .select('*')
-        .eq('role', 'seeker')
-        .order('created_at', { ascending: false })
-        .limit(30)
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    let query = (supabase as any)
+      .from('profiles')
+      .select('*')
+      .eq('role', 'seeker')
+      .order('created_at', { ascending: false })
+      .limit(30)
 
-      const { data, error } = await query
+    // 필터 조건 있을 때만 추가
+    if (filterNeighborhood) {
+      query = query.eq('neighborhood', filterNeighborhood)
+    }
+
+    if (filterCert === 'sir') {
+      query = query.eq('has_sir', true)
+    }
+
+    if (filterCert === 'foodsafe') {
+      query = query.eq('has_foodsafe', true)
+    }
+
+    const { data, error } = await query
+
       if (error) {
         console.warn('[dashboard] fetch seekers error:', error)
         setSeekers([])
@@ -164,15 +175,15 @@ export default function EmployerDashboardPage() {
   const [upsellFeature, setUpsellFeature] = useState<string | undefined>()
 
   const handleUnlockClick = async (seekerId: string) => {
-    await access.open(seekerId)
-    if (access.status === 'blocked') {
-      setUpsellReason(access.reason === 'no_credit' ? 'no_credit' : 'pro_required')
+    const result = await access.open(seekerId)
+    if (result.status === 'blocked') {
+      setUpsellReason(result.reason === 'no_credit' ? 'no_credit' : 'pro_required')
       setUpsellFeature('구직자 상세 프로필 열람')
       setUpsellOpen(true)
       return
     }
-    if (access.profile) {
-      setUnlockedSeeker(access.profile)
+    if (result.profile) {
+      setUnlockedSeeker(result.profile)
     }
   }
 

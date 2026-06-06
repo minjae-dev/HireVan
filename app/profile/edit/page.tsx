@@ -1,8 +1,8 @@
 'use client'
 
-import Link from 'next/link'
 import { useAuth } from '@/lib/auth-context'
 import { supabase } from '@/lib/supabase'
+import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
 
@@ -12,6 +12,16 @@ const VISA_OPTIONS = ['워킹홀리데이', '학생비자', '취업비자', '영
  * 구직자가 다중 선택할 수 있는 기본 스킬 옵션.
  * 사용자가 인풋을 통해 직접 새 스킬을 추가할 수 있다.
  */
+const NEIGHBORHOOD_OPTIONS = [
+  '다운타운',
+  '버나비',
+  '서리',
+  '코퀴틀람',
+  '리치몬드',
+  '노스밴쿠버',
+  '기타',
+] as const
+
 const SKILL_OPTIONS = [
   'POS',
   '캐셔',
@@ -73,6 +83,7 @@ export default function EditProfilePage() {
   const [skillDraft, setSkillDraft] = useState('')
   const [availableShifts, setAvailableShifts] = useState<string[]>([])
   const [shiftDraft, setShiftDraft] = useState('')
+  const [neighborhood, setNeighborhood] = useState('')
   const [postalCodePrefix, setPostalCodePrefix] = useState('')
   // ─────────────────────────────────────
   const [saving, setSaving] = useState(false)
@@ -134,6 +145,7 @@ export default function EditProfilePage() {
         setAvailableShifts(
           Array.isArray(d.available_shifts) ? (d.available_shifts as string[]) : [],
         )
+        setNeighborhood((d.neighborhood as string) || '')
         setPostalCodePrefix(
           typeof d.postal_code_prefix === 'string'
             ? ((d.postal_code_prefix as string) ?? '')
@@ -217,6 +229,7 @@ export default function EditProfilePage() {
         0,
         Math.min(600, Number.isFinite(localExperienceMonths) ? localExperienceMonths : 0),
       )
+      payload.neighborhood = neighborhood || null
       payload.local_experience_months = months
       payload.skills = skills
       payload.available_shifts = availableShifts
@@ -260,7 +273,6 @@ export default function EditProfilePage() {
       //   2) verification_requests 테이블에 row INSERT
       //   3) 관리자 대시보드에서 검토 후 is_verified=true + credits+=50 처리
       // 현 단계에서는 DB 쓰기/외부 API 호출 없이 토스트만 띄운다.
-      // eslint-disable-next-line no-console
       console.info('[verification] 요청 접수:', {
         userId: user.id,
         fileName: certFile.name,
@@ -435,6 +447,21 @@ export default function EditProfilePage() {
                 </div>
               </div>
 
+              {/* ── 거주 구역 ── */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">거주 구역</label>
+                <select
+                  value={neighborhood}
+                  onChange={e => setNeighborhood(e.target.value)}
+                  className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent bg-white"
+                >
+                  <option value="">선택해주세요</option>
+                  {NEIGHBORHOOD_OPTIONS.map(n => (
+                    <option key={n} value={n}>{n}</option>
+                  ))}
+                </select>
+              </div>
+
               {/* ── 구직자 한정: 경쟁력 어필 (경력 / 스킬 / 근무시간 / 우편번호) ── */}
               <CompetitiveFields
                 localExperienceMonths={localExperienceMonths}
@@ -447,9 +474,6 @@ export default function EditProfilePage() {
                 setAvailableShifts={setAvailableShifts}
                 shiftDraft={shiftDraft}
                 setShiftDraft={setShiftDraft}
-                postalCodePrefix={postalCodePrefix}
-                handlePostalCodeChange={handlePostalCodeChange}
-                postalCodeValid={postalCodeValid}
                 toggleFromList={toggleFromList}
                 addCustomValue={addCustomValue}
               />
@@ -524,9 +548,6 @@ interface CompetitiveFieldsProps {
   setAvailableShifts: (next: string[]) => void
   shiftDraft: string
   setShiftDraft: (next: string) => void
-  postalCodePrefix: string
-  handlePostalCodeChange: (raw: string) => void
-  postalCodeValid: boolean
   toggleFromList: (
     value: string,
     list: string[],
@@ -551,9 +572,6 @@ function CompetitiveFields({
   setAvailableShifts,
   shiftDraft,
   setShiftDraft,
-  postalCodePrefix,
-  handlePostalCodeChange,
-  postalCodeValid,
   toggleFromList,
   addCustomValue,
 }: CompetitiveFieldsProps) {
@@ -734,34 +752,6 @@ function CompetitiveFields({
         )}
       </div>
 
-      {/* 우편번호 */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-1.5">
-          희망 근무지 우편번호 3자리{' '}
-          <span className="text-gray-400">(예: V6B · 다운타운)</span>
-        </label>
-        <input
-          type="text"
-          value={postalCodePrefix}
-          onChange={e => handlePostalCodeChange(e.target.value)}
-          maxLength={3}
-          placeholder="V6B"
-          inputMode="text"
-          autoCapitalize="characters"
-          spellCheck={false}
-          aria-invalid={!postalCodeValid}
-          className={`w-32 border rounded-xl px-4 py-3 text-sm font-mono tracking-widest focus:outline-none focus:ring-2 focus:border-transparent ${
-            postalCodeValid
-              ? 'border-gray-200 focus:ring-orange-300'
-              : 'border-red-300 focus:ring-red-300 bg-red-50'
-          }`}
-        />
-        {!postalCodeValid && (
-          <p className="mt-1.5 text-xs font-semibold text-red-500">
-            ⚠️ 영문+숫자+영문 3자리 형식이어야 합니다. (예: V6B)
-          </p>
-        )}
-      </div>
     </div>
   )
 }

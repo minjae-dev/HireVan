@@ -4,6 +4,14 @@ import { useCallback, useState } from 'react'
 import { supabase } from './supabase'
 import type { PublicProfile, ViewSeekerProfileResult } from './database.types'
 
+export interface SeekerAccessResult {
+  status: 'idle' | 'blocked' | 'error'
+  profile: PublicProfile | null
+  reason: ViewSeekerProfileResult['reason'] | null
+  creditsRemaining: number
+  error: string | null
+}
+
 interface UseSeekerAccessState {
   loading: boolean
   profile: PublicProfile | null
@@ -14,7 +22,7 @@ interface UseSeekerAccessState {
   error: string | null
   /** 현재 열람 시도한 구직자 ID (RPC에 사용) */
   seekerId: string | null
-  open: (seekerId: string) => Promise<void>
+  open: (seekerId: string) => Promise<SeekerAccessResult>
   close: () => void
 }
 
@@ -40,7 +48,7 @@ export function useSeekerAccess(): UseSeekerAccessState {
   const [error, setError] = useState<string | null>(null)
   const [seekerId, setSeekerId] = useState<string | null>(null)
 
-  const open = useCallback(async (id: string) => {
+  const open = useCallback(async (id: string): Promise<SeekerAccessResult> => {
     setSeekerId(id)
     setLoading(true)
     setError(null)
@@ -53,29 +61,60 @@ export function useSeekerAccess(): UseSeekerAccessState {
 
       if (rpcError) {
         console.error('[useSeekerAccess] RPC error:', rpcError)
-        setError(rpcError.message ?? 'Unknown error')
+        const errResult: SeekerAccessResult = {
+          status: 'error',
+          profile: null,
+          reason: null,
+          creditsRemaining: 0,
+          error: rpcError.message ?? 'Unknown error',
+        }
+        setError(errResult.error)
         setStatus('error')
-        return
+        return errResult
       }
 
       const result = data as ViewSeekerProfileResult
 
       if (result?.ok && result.profile) {
+        const okResult: SeekerAccessResult = {
+          status: 'idle',
+          profile: result.profile,
+          reason: result.reason ?? null,
+          creditsRemaining: result.credits_remaining ?? 0,
+          error: null,
+        }
         setProfile(result.profile)
         setCreditsRemaining(result.credits_remaining ?? 0)
         setReason(result.reason)
         setStatus('idle')
+        return okResult
       } else {
+        const blockedResult: SeekerAccessResult = {
+          status: 'blocked',
+          profile: null,
+          reason: result?.reason ?? 'no_credit',
+          creditsRemaining: result?.credits_remaining ?? 0,
+          error: null,
+        }
         setProfile(null)
         setReason(result?.reason ?? 'no_credit')
         setCreditsRemaining(result?.credits_remaining ?? 0)
         setStatus('blocked')
+        return blockedResult
       }
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown error'
       console.error('[useSeekerAccess] Unexpected error:', err)
+      const errResult: SeekerAccessResult = {
+        status: 'error',
+        profile: null,
+        reason: null,
+        creditsRemaining: 0,
+        error: message,
+      }
       setError(message)
       setStatus('error')
+      return errResult
     } finally {
       setLoading(false)
     }

@@ -9,6 +9,16 @@ type Role = 'employer' | 'seeker'
 
 const VISA_OPTIONS = ['워킹홀리데이', '학생비자', '취업비자', '영주권/시민권', '기타']
 
+const NEIGHBORHOOD_OPTIONS = [
+  '다운타운',
+  '버나비',
+  '서리',
+  '코퀴틀람',
+  '리치몬드',
+  '노스밴쿠버',
+  '기타',
+]
+
 export default function SignupPage() {
   const router = useRouter()
   const [step, setStep] = useState<1 | 2>(1)
@@ -21,6 +31,7 @@ export default function SignupPage() {
   const [hasSir, setHasSir] = useState(false)
   const [hasFoodsafe, setHasFoodsafe] = useState(false)
   const [bio, setBio] = useState('')
+  const [neighborhood, setNeighborhood] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -62,6 +73,7 @@ export default function SignupPage() {
       profilePayload.visa_expiry_date = visaExpiryDate || null
       profilePayload.has_sir = hasSir
       profilePayload.has_foodsafe = hasFoodsafe
+      profilePayload.neighborhood = neighborhood || null
     }
 
     const { error: profileError } = await (supabase as any).from('profiles').insert(profilePayload)
@@ -218,6 +230,20 @@ export default function SignupPage() {
                       />
                     </div>
                   )}
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">거주 구역</label>
+                    <select
+                      value={neighborhood}
+                      onChange={e => setNeighborhood(e.target.value)}
+                      className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent bg-white"
+                    >
+                      <option value="">선택해주세요</option>
+                      {NEIGHBORHOOD_OPTIONS.map(n => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
