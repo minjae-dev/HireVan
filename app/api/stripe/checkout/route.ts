@@ -19,7 +19,6 @@ export async function POST(request: NextRequest) {
     const secret = process.env.STRIPE_SECRET_KEY ?? process.env.STRIPE_API_KEY ?? ''
 
     // 👉 [B] 로컬/실서버 1달러 강제 테스트 모드 (필요할 때 아래 라인의 주역을 해제하세요)
-    // const secret = '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'.trim()
 
 
     if (!secret) {
