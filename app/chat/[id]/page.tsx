@@ -102,6 +102,9 @@ export default function ChatRoomPage() {
   const [scheduleLocation, setScheduleLocation] = useState('')
   const [scheduling, setScheduling] = useState(false)
 
+  // 면접 제안 상태 변경 로딩 상태 (중복 클릭 방지)
+  const [proposalSubmitting, setProposalSubmitting] = useState<string | null>(null)
+
   // 채팅방 로드
   const fetchRoom = useCallback(async () => {
     const { data } = await supabase
@@ -562,17 +565,19 @@ const handleReportNoShow = async (msg: Message) => {
                   {pending && isSeeker && (
                     <div className="mt-4 flex gap-2">
                       <button
-                        onClick={() => handleConfirmInterview(msg)}
-                        className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white transition-all active:scale-95"
+                        onClick={() => handleUpdateProposalStatus(msg, 'confirmed')}
+                        disabled={proposalSubmitting === msg.id}
+                        className="flex-1 py-2.5 rounded-xl text-xs font-bold text-white transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                         style={{ backgroundColor: 'var(--brand)' }}
                       >
-                        수락 및 확정
+                        {proposalSubmitting === msg.id ? '처리 중...' : '수락 및 확정'}
                       </button>
                       <button
-                        onClick={() => handleDeclineInterview(msg)}
-                        className="flex-1 py-2.5 rounded-xl text-xs font-bold text-red-500 border border-red-200 bg-white hover:bg-red-50 transition-all active:scale-95"
+                        onClick={() => handleUpdateProposalStatus(msg, 'declined')}
+                        disabled={proposalSubmitting === msg.id}
+                        className="flex-1 py-2.5 rounded-xl text-xs font-bold text-red-500 border border-red-200 bg-white hover:bg-red-50 transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
                       >
-                        거절
+                        {proposalSubmitting === msg.id ? '처리 중...' : '거절'}
                       </button>
                     </div>
                   )}
