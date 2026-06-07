@@ -13,6 +13,51 @@
   --font-sans: var(--font-noto), 'Noto Sans KR', sans-serif;
 }
 
+/* ───────────────────────────────────────────────
+ * Custom Animations
+ * - `animate-fade-in` : 부드럽게 위로 올라오며 나타남
+ * - `animate-fade-in-up` : 살짝 더 강조된 등장 효과
+ * ─────────────────────────────────────────────── */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulseRing {
+  0% {
+    box-shadow: 0 0 0 0 rgba(255, 107, 53, 0.4);
+  }
+  70% {
+    box-shadow: 0 0 0 12px rgba(255, 107, 53, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(255, 107, 53, 0);
+  }
+}
+
+@theme {
+  --animate-fade-in: fadeIn 0.45s ease-out both;
+  --animate-fade-in-up: fadeInUp 0.55s ease-out both;
+  --animate-pulse-ring: pulseRing 2s ease-out infinite;
+}
+
 /*
  * 모바일 브라우저 주소창 높이 변화 대응 (dvh — dynamic viewport height).
  * iOS Safari / Chrome Android 에서 주소창이 접히거나 펴질 때

@@ -87,7 +87,7 @@ export default function Navbar() {
                   pathname.startsWith('/employer/dashboard') ? 'text-orange-500' : 'text-gray-600'
                 }`}
               >
-                대쉬보드
+                대시보드
               </Link>
             )}
             <button
