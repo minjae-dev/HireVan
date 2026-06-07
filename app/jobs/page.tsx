@@ -31,20 +31,15 @@ export default function JobsPage() {
 
   const fetchJobs = useCallback(async () => {
     setLoading(true)
-    let query = supabase
+    const { data } = await supabase
       .from('job_posts')
       .select('*, profiles(name, role)')
       .eq('status', 'open')
       .order('created_at', { ascending: false })
 
-    if (location !== '전체') {
-      query = query.ilike('location', `%${location}%`)
-    }
-
-    const { data } = await query
     setJobs((data as unknown as JobPost[]) ?? [])
     setLoading(false)
-  }, [location])
+  }, [])
 
   useEffect(() => {
     fetchJobs()
@@ -66,6 +61,21 @@ export default function JobsPage() {
   const filteredJobs = useMemo(() => {
     let result = [...jobs]
 
+    // 위치 필터
+    if (location !== '전체') {
+      const locKeyword = location.toLowerCase()
+      result = result.filter(job => {
+        const jobLocation = (job.location || '').toLowerCase()
+        const description = (job.description || '').toLowerCase()
+        const title = (job.title || '').toLowerCase()
+        return (
+          jobLocation.includes(locKeyword) ||
+          description.includes(locKeyword) ||
+          title.includes(locKeyword)
+        )
+      })
+    }
+
     // 업종 필터
     if (jobType !== '전체') {
       result = result.filter(job => {
@@ -82,7 +92,7 @@ export default function JobsPage() {
     }
 
     return result
-  }, [jobs, jobType, sortBy])
+  }, [jobs, location, jobType, sortBy])
 
   const activeFilterCount = (location !== '전체' ? 1 : 0) + (jobType !== '전체' ? 1 : 0)
 
