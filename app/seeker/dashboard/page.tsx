@@ -4,10 +4,24 @@ import { useAuth } from '@/lib/auth-context'
 import type { JobMatchResult, SeekerPreferences } from '@/lib/database.types'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 const CATEGORIES = ['카페', '식당', '네일숍', '편의점', '소매점', '청소용역', '배송', '기타']
 const LOCATIONS = ['다운타운', '버나비', '서리', '코퀴틀람', '리치몬드', '노스밴쿠버', '기타']
+
+/**
+ * 시급 문자열에서 최소/최대 숫자(CAD) 추출.
+ * "시급 $17", "$17~$20", "17.50" 등 다양한 형식 지원.
+ * 추출 실패 시 null 반환.
+ */
+function parseSalaryRange(salary: string | null | undefined): { min: number | null; max: number | null } {
+  if (!salary) return { min: null, max: null }
+  const numbers = salary.match(/\d+(?:\.\d+)?/g)
+  if (!numbers || numbers.length === 0) return { min: null, max: null }
+  const values = numbers.map(n => parseFloat(n))
+  if (values.length === 1) return { min: values[0], max: values[0] }
+  return { min: Math.min(...values), max: Math.max(...values) }
+}
 
 export default function SeekerDashboardPage() {
   const { user, profile, loading: authLoading } = useAuth()
@@ -82,6 +96,43 @@ export default function SeekerDashboardPage() {
   const toggleLocation = (loc: string) => {
     setFormLocations(prev => prev.includes(loc) ? prev.filter(l => l !== loc) : [...prev, loc])
   }
+
+  // RPC match_jobs_to_seeker는 카테고리(desired_categories)만 필터링하고
+  // 지역/시급은 평가에 포함되지 않으므로, 클라이언트에서 추가 필터링한다.
+  const filteredMatches = useMemo(() => {
+    if (!matches || matches.length === 0) return []
+    if (!preferences) return matches
+
+    const desiredLocations = preferences.desired_locations ?? []
+    const desiredSalaryMin = preferences.desired_salary_min
+    const desiredSalaryMax = preferences.desired_salary_max
+    const hasLocationFilter = desiredLocations.length > 0
+    const hasSalaryFilter = desiredSalaryMin != null || desiredSalaryMax != null
+    if (!hasLocationFilter && !hasSalaryFilter) return matches
+
+    return matches.filter(match => {
+      // 지역 필터: 선택 지역 중 하나라도 location 문자열에 포함되면 매칭
+      if (hasLocationFilter) {
+        const jobLoc = (match.location || '').toLowerCase()
+        const locHit = desiredLocations.some(loc => jobLoc.includes(loc.toLowerCase()))
+        if (!locHit) return false
+      }
+
+      // 시급 필터: 공고 시급 범위가 희망 범위와 겹치는지 검사
+      if (hasSalaryFilter) {
+        const { min, max } = parseSalaryRange(match.salary)
+        // 시급 정보가 없으면 필터 적용이 불가하므로 포함시킴
+        if (min == null && max == null) return true
+        const jobMin = min ?? max!
+        const jobMax = max ?? min!
+        // 겹침 조건: jobMin ≤ desiredMax && jobMax ≥ desiredMin
+        if (desiredSalaryMax != null && jobMin > desiredSalaryMax) return false
+        if (desiredSalaryMin != null && jobMax < desiredSalaryMin) return false
+      }
+
+      return true
+    })
+  }, [matches, preferences])
 
   if (authLoading) {
     return (
@@ -186,9 +237,18 @@ export default function SeekerDashboardPage() {
             <p className="mt-2 text-sm font-semibold text-gray-700">아직 맞춤 공고가 없어요</p>
             <p className="mt-1 text-xs text-gray-500">위에서 희망 조건을 설정하면 조건에 맞는 공고를 추천해드려요.</p>
           </div>
+        ) : filteredMatches.length === 0 ? (
+          <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center">
+            <p className="text-3xl">📭</p>
+            <p className="mt-2 text-sm font-semibold text-gray-700">희망 조건에 맞는 공고가 없어요</p>
+            <p className="mt-1 text-xs text-gray-500">지역이나 시급 조건을 조정하면 더 많은 공고를 볼 수 있어요.</p>
+            <p className="mt-3 text-[10px] text-gray-400">전체 맞춤 공고 {matches.length}개 중 조건에 맞는 0개</p>
+          </div>
         ) : (
-          <div className="space-y-3">
-            {matches.map(match => (
+          <>
+            <p className="mb-2 text-xs text-gray-400">총 {filteredMatches.length}개</p>
+            <div className="space-y-3">
+            {filteredMatches.map(match => (
               <Link key={match.job_id} href={`/jobs/${match.job_id}`}
                 className="block rounded-2xl border border-gray-100 bg-white p-5 transition-all hover:border-orange-200 hover:shadow-md"
               >
@@ -211,7 +271,8 @@ export default function SeekerDashboardPage() {
                 </div>
               </Link>
             ))}
-          </div>
+            </div>
+          </>
         )}
       </section>
     </div>
