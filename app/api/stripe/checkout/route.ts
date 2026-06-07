@@ -101,22 +101,14 @@ export async function POST(request: NextRequest) {
     let returnTo: string | null = null
 
     // -------------------------------------------------------------------------
-    // 💡 [방법 1] 1달러 라이브 테스트 모드로 진행하고 싶을 때 (현재 활성화)
-    // -------------------------------------------------------------------------
-    priceId = 'price_1TfRlUDamweJ0Z1TXoXROtxX' // 방금 생성한 1달러 제품 번호
-
-    // -------------------------------------------------------------------------
     // 💡 [방법 2] 실제 유저 결제용 $29 PRO 모드로 배포할 때 
     //            (실제 서비스 출시 시 아래 주석들을 해제하고 위의 방법 1을 주석 처리하세요)
     // -------------------------------------------------------------------------
-    /*
     const defaultPriceId =
-      process.env.STRIPE_PRICE_ID ??  
-      process.env.NEXT_PUBLIC_STRIPE_PRICE_ID ??
       process.env.STRIPE_PRO_PRICE_ID
       
-    priceId = defaultPriceId ?? ''
-    */
+    priceId = defaultPriceId ?? 'price_1Tf632DamweJ0Z1T5TpeFzB4'
+    console.log(priceId)
 
     try {
       const body = (await request.json().catch(() => ({}))) as {
@@ -124,11 +116,6 @@ export async function POST(request: NextRequest) {
         returnTo?: string
       }
       
-      // 실제 배포 모드일 때만 프론트엔드가 보낸 유효한 priceId 커스텀 매핑을 허용합니다.
-      // (1달러 고정 테스트 모드일 때는 프론트엔드 값에 상관없이 무조건 1달러 플랜 적용)
-      if (body.priceId && body.priceId.startsWith('price_') && priceId !== 'price_1TfRlUDamweJ0Z1TXoXROtxX') {
-        priceId = body.priceId
-      }
       if (typeof body.returnTo === 'string' && body.returnTo.startsWith('/')) {
         returnTo = body.returnTo
       }
@@ -161,28 +148,28 @@ export async function POST(request: NextRequest) {
 
     try {
       const idempotencyKey = `checkout_${user.id}_${Date.now()}`
-      
       const session = await stripe.checkout.sessions.create({
-        mode: 'subscription',
-        payment_method_types: ['card'],
-        line_items: [{ price: priceId, quantity: 1 }],
-        customer: profile.stripe_customer_id ?? undefined,
-        customer_email: profile.stripe_customer_id ? undefined : (user.email ?? undefined),
-        client_reference_id: user.id,
-        metadata: {
-          userId: user.id,
-        },
-        subscription_data: {
-          metadata: {
-            userId: user.id,
-          },
-        },
-        allow_promotion_codes: true,
-        success_url: successUrl,
-        cancel_url: cancelUrl,
-      }, { idempotencyKey })
-
-      return NextResponse.json({ url: session.url, sessionId: session.id })
+  mode: 'subscription',
+  payment_method_types: ['card'],
+  line_items: [{ price: priceId, quantity: 1 }],
+  customer: profile.stripe_customer_id ?? undefined,
+  customer_email: profile.stripe_customer_id ? undefined : (user.email ?? undefined),
+  client_reference_id: user.id,
+  allow_promotion_codes: false, // 테스트 중엔 OFF 추천
+  metadata: {
+    userId: user.id,
+  },
+  subscription_data: {
+    metadata: {
+      userId: user.id,
+    },
+    // 💡 핵심: 구독 생성 시 결제 수단을 자동으로 기본값으로 등록하게 설정
+  },
+  success_url: successUrl,
+  cancel_url: cancelUrl,
+      }, { idempotencyKey });
+      
+            return NextResponse.json({ url: session.url, sessionId: session.id })
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Unknown Stripe error'
       console.error('[stripe/checkout] Failed to create session:', message)
