@@ -4,16 +4,21 @@ import { useAuth } from '@/lib/auth-context'
 import type { JobMatchResult, SeekerPreferences } from '@/lib/database.types'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
 const CATEGORIES = ['카페', '식당', '네일숍', '편의점', '소매점', '청소용역', '배송', '기타']
 const LOCATIONS = ['다운타운', '버나비', '서리', '코퀴틀람', '리치몬드', '노스밴쿠버', '기타']
 
-/**
- * 시급 문자열에서 최소/최대 숫자(CAD) 추출.
- * "시급 $17", "$17~$20", "17.50" 등 다양한 형식 지원.
- * 추출 실패 시 null 반환.
- */
+const LOCATION_ALIASES: Record<string, string[]> = {
+  '다운타운': ['다운타운', 'downtown', 'dt', 'vancouver downtown', 'downtown vancouver', '시내'],
+  '버나비': ['버나비', 'burnaby', 'metrotown'],
+  '서리': ['서리', 'surrey'],
+  '코퀴틀람': ['코퀴틀람', 'coquitlam', 'coq', 'port coquitlam', '포트코퀴틀람'],
+  '리치몬드': ['리치몬드', 'richmond'],
+  '노스밴쿠버': ['노스밴쿠버', 'north vancouver', 'north van', 'n van'],
+  '기타': ['기타', 'other', '기타지역'],
+}
+
 function parseSalaryRange(salary: string | null | undefined): { min: number | null; max: number | null } {
   if (!salary) return { min: null, max: null }
   const numbers = salary.match(/\d+(?:\.\d+)?/g)
@@ -23,12 +28,23 @@ function parseSalaryRange(salary: string | null | undefined): { min: number | nu
   return { min: Math.min(...values), max: Math.max(...values) }
 }
 
+function matchLocation(jobLocation: string, selectedLocations: string[]): boolean {
+  if (selectedLocations.length === 0) return true
+  const jobLoc = (jobLocation || '').toLowerCase().trim()
+  if (!jobLoc) return false
+  return selectedLocations.some(selected => {
+    const aliases = LOCATION_ALIASES[selected] ?? [selected.toLowerCase()]
+    return aliases.some(alias => jobLoc.includes(alias.toLowerCase()))
+  })
+}
+
 export default function SeekerDashboardPage() {
   const { user, profile, loading: authLoading } = useAuth()
   const [matches, setMatches] = useState<JobMatchResult[]>([])
   const [matchesLoading, setMatchesLoading] = useState(true)
   const [matchError, setMatchError] = useState<string | null>(null)
   const [preferences, setPreferences] = useState<SeekerPreferences | null>(null)
+  const latestPreferencesRef = useRef<SeekerPreferences | null>(null)
   const [showPrefForm, setShowPrefForm] = useState(false)
   const [formCategories, setFormCategories] = useState<string[]>([])
   const [formLocations, setFormLocations] = useState<string[]>([])
@@ -36,31 +52,51 @@ export default function SeekerDashboardPage() {
   const [formSalaryMax, setFormSalaryMax] = useState('')
   const [formSaving, setFormSaving] = useState(false)
 
+  const getValidAccessToken = useCallback(async (): Promise<string | null> => {
+    const { data: userData, error: userErr } = await supabase.auth.getUser()
+    if (!userErr && userData.user) {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (session?.access_token) return session.access_token
+    }
+    const { data: refreshed, error: refreshErr } = await supabase.auth.refreshSession()
+    if (!refreshErr && refreshed.session?.access_token) {
+      return refreshed.session.access_token
+    }
+    return null
+  }, [])
+
   const fetchMatches = useCallback(async () => {
     if (!user) return
     setMatchesLoading(true)
     setMatchError(null)
     try {
-      const { data: { session } } = await supabase.auth.getSession()
+      const accessToken = await getValidAccessToken()
+      if (!accessToken) {
+        throw new Error('로그인 세션이 만료되었습니다. 다시 로그인해주세요.')
+      }
       const res = await fetch('/api/seeker/matches', {
-        headers: { Authorization: `Bearer ${session?.access_token ?? ''}` },
+        headers: { Authorization: `Bearer ${accessToken}` },
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error ?? 'Failed to fetch matches')
+
+      const fetchedPrefs = data.preferences ?? null
       setMatches(data.matches ?? [])
-      setPreferences(data.preferences ?? null)
-      if (data.preferences) {
-        setFormCategories(data.preferences.desired_categories ?? [])
-        setFormLocations(data.preferences.desired_locations ?? [])
-        setFormSalaryMin(data.preferences.desired_salary_min?.toString() ?? '')
-        setFormSalaryMax(data.preferences.desired_salary_max?.toString() ?? '')
+      setPreferences(fetchedPrefs)
+      latestPreferencesRef.current = fetchedPrefs
+
+      if (fetchedPrefs) {
+        setFormCategories(fetchedPrefs.desired_categories ?? [])
+        setFormLocations(fetchedPrefs.desired_locations ?? [])
+        setFormSalaryMin(fetchedPrefs.desired_salary_min?.toString() ?? '')
+        setFormSalaryMax(fetchedPrefs.desired_salary_max?.toString() ?? '')
       }
     } catch (err) {
       setMatchError(err instanceof Error ? err.message : 'Unknown error')
     } finally {
       setMatchesLoading(false)
     }
-  }, [user])
+  }, [user, getValidAccessToken])
 
   useEffect(() => {
     if (!authLoading && user) fetchMatches()
@@ -70,7 +106,7 @@ export default function SeekerDashboardPage() {
     if (!user) return
     setFormSaving(true)
     try {
-      const { error } = await supabase.from('seeker_preferences').upsert({
+      const newPrefs = {
         seeker_id: user.id,
         desired_categories: formCategories,
         desired_locations: formLocations,
@@ -79,10 +115,14 @@ export default function SeekerDashboardPage() {
         desired_visa_types: [],
         desired_certificates: [],
         notifications_enabled: true,
-      }, { onConflict: 'seeker_id' })
+      }
+      const { error } = await supabase.from('seeker_preferences').upsert(newPrefs, { onConflict: 'seeker_id' })
       if (error) throw error
+      // 저장 즉시 ref/state 업데이트 → useMemo가 최신값으로 필터링
+      latestPreferencesRef.current = newPrefs as SeekerPreferences
+      setPreferences(newPrefs as SeekerPreferences)
       setShowPrefForm(false)
-      fetchMatches()
+      await fetchMatches()
     } catch (err) {
       alert('저장 중 오류가 발생했습니다: ' + (err instanceof Error ? err.message : 'Unknown'))
     } finally {
@@ -97,39 +137,41 @@ export default function SeekerDashboardPage() {
     setFormLocations(prev => prev.includes(loc) ? prev.filter(l => l !== loc) : [...prev, loc])
   }
 
-  // RPC match_jobs_to_seeker는 카테고리(desired_categories)만 필터링하고
-  // 지역/시급은 평가에 포함되지 않으므로, 클라이언트에서 추가 필터링한다.
   const filteredMatches = useMemo(() => {
     if (!matches || matches.length === 0) return []
-    if (!preferences) return matches
 
-    const desiredLocations = preferences.desired_locations ?? []
-    const desiredSalaryMin = preferences.desired_salary_min
-    const desiredSalaryMax = preferences.desired_salary_max
+    const prefs = latestPreferencesRef.current ?? preferences
+
+    // preferences row 자체가 없으면 전체 표시
+    if (!prefs) return matches
+
+    const desiredLocations = prefs.desired_locations ?? []
+    const desiredSalaryMin = prefs.desired_salary_min
+    const desiredSalaryMax = prefs.desired_salary_max
     const hasLocationFilter = desiredLocations.length > 0
     const hasSalaryFilter = desiredSalaryMin != null || desiredSalaryMax != null
+
+    // 조건이 하나도 없으면 전체 표시
     if (!hasLocationFilter && !hasSalaryFilter) return matches
 
-    return matches.filter(match => {
-      // 지역 필터: 선택 지역 중 하나라도 location 문자열에 포함되면 매칭
-      if (hasLocationFilter) {
-        const jobLoc = (match.location || '').toLowerCase()
-        const locHit = desiredLocations.some(loc => jobLoc.includes(loc.toLowerCase()))
-        if (!locHit) return false
-      }
+    if (process.env.NODE_ENV === 'development') {
+      console.log('[location filter] 선택된 지역:', desiredLocations)
+      console.log('[location filter] 공고 location 값:', matches.map(m => m.location))
+    }
 
-      // 시급 필터: 공고 시급 범위가 희망 범위와 겹치는지 검사
+    return matches.filter(m => {
+      if (hasLocationFilter && !matchLocation(m.location ?? '', desiredLocations)) {
+        return false
+      }
       if (hasSalaryFilter) {
-        const { min, max } = parseSalaryRange(match.salary)
-        // 시급 정보가 없으면 필터 적용이 불가하므로 포함시킴
+        const { min, max } = parseSalaryRange(m.salary)
         if (min == null && max == null) return true
         const jobMin = min ?? max!
         const jobMax = max ?? min!
-        // 겹침 조건: jobMin ≤ desiredMax && jobMax ≥ desiredMin
-        if (desiredSalaryMax != null && jobMin > desiredSalaryMax) return false
-        if (desiredSalaryMin != null && jobMax < desiredSalaryMin) return false
+        const overlapMax = desiredSalaryMax ?? Number.POSITIVE_INFINITY
+        const overlapMin = desiredSalaryMin ?? 0
+        if (jobMin > overlapMax || jobMax < overlapMin) return false
       }
-
       return true
     })
   }, [matches, preferences])
