@@ -119,8 +119,8 @@ export default function SeekerDashboardPage() {
       const { error } = await supabase.from('seeker_preferences').upsert(newPrefs, { onConflict: 'seeker_id' })
       if (error) throw error
       // 저장 즉시 ref/state 업데이트 → useMemo가 최신값으로 필터링
-      latestPreferencesRef.current = newPrefs as SeekerPreferences
-      setPreferences(newPrefs as SeekerPreferences)
+      latestPreferencesRef.current = newPrefs as unknown as SeekerPreferences;
+      setPreferences(newPrefs as unknown as SeekerPreferences);
       setShowPrefForm(false)
       await fetchMatches()
     } catch (err) {
