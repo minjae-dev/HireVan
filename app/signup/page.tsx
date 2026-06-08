@@ -1,9 +1,9 @@
 'use client'
 
-import { useState } from 'react'
+import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
-import { supabase } from '@/lib/supabase'
+import { useState } from 'react'
 
 type Role = 'employer' | 'seeker'
 
@@ -19,8 +19,19 @@ const NEIGHBORHOOD_OPTIONS = [
   '기타',
 ]
 
+/**
+ * 회원가입 페이지는 항상 step 1(역할 선택)에서 시작한다.
+ * 랜딩페이지에서 별도의 URL 파라미터 없이 진입해도 폼이 자연스럽게 동작하도록
+ * 설계되어 있으며, 사용자가 step1 에서 '구직자' / '채용자' 카드를 직접 선택한다.
+ */
 export default function SignupPage() {
+  return <SignupForm />
+}
+
+function SignupForm() {
   const router = useRouter()
+
+  // 회원가입 단계는 항상 step 1(역할 선택)에서 시작한다.
   const [step, setStep] = useState<1 | 2>(1)
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -32,6 +43,8 @@ export default function SignupPage() {
   const [hasFoodsafe, setHasFoodsafe] = useState(false)
   const [bio, setBio] = useState('')
   const [neighborhood, setNeighborhood] = useState('')
+  // 구직자 전용 — 프로필 정보 공개 동의
+  const [privacyConsent, setPrivacyConsent] = useState(false)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
@@ -48,6 +61,12 @@ export default function SignupPage() {
   const handleSignup = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!role) return
+    // 구직자인 경우 동의 체크가 해제된 상태에서 form submit 이 호출되면 막는다.
+    // (button disabled 만으로는 devtools 조작 등을 완전히 막을 수 없어서 방어 로직 추가)
+    if (role === 'seeker' && !privacyConsent) {
+      setError('프로필 정보 공개에 동의해야 가입할 수 있습니다.')
+      return
+    }
     setError('')
     setLoading(true)
 
@@ -59,7 +78,7 @@ export default function SignupPage() {
       return
     }
 
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const profilePayload: Record<string, unknown> = {
       id: data.user.id,
       role,
@@ -76,6 +95,7 @@ export default function SignupPage() {
       profilePayload.neighborhood = neighborhood || null
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { error: profileError } = await (supabase as any).from('profiles').insert(profilePayload)
 
     if (profileError) {
@@ -86,6 +106,10 @@ export default function SignupPage() {
 
     router.push('/')
   }
+
+  // 구직자만 동의 체크가 필요. 채용자는 체크박스 자체가 렌더링되지 않으므로 항상 통과.
+  const isSeeker = role === 'seeker'
+  const submitDisabled = loading || (isSeeker && !privacyConsent)
 
   return (
     <div className="min-h-[80vh] flex flex-col justify-center">
@@ -290,6 +314,47 @@ export default function SignupPage() {
                 <p className="text-sm text-red-500 bg-red-50 rounded-xl px-4 py-3">{error}</p>
               )}
 
+              {/* ── 구직자 전용: 프로필 정보 공개 동의 (필수) ──
+                   - step 2(계정 정보 입력) 화면에서, 구직자(seeker) 모드일 때만 렌더링
+                   - 채용자(employer) 모드에서는 이 영역이 아예 렌더링되지 않으며,
+                     체크 상태와 무관하게 '가입하기' 버튼이 정상 작동한다. */}
+              {isSeeker && (
+                <div className="rounded-xl border border-gray-200 bg-gray-50/60 px-4 py-3">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={privacyConsent}
+                      onChange={e => setPrivacyConsent(e.target.checked)}
+                      required
+                      aria-required="true"
+                      className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-gray-300 text-orange-500 focus:ring-orange-400"
+                    />
+                    <span className="text-xs leading-relaxed text-gray-700">
+                      채용 매칭을 위해 비자 상태, 경력 사항, 거주 지역 등 프로필 정보가
+                      기업 채용 담당자에게 공개되는 것에 동의합니다.{' '}
+                      <span className="text-red-500 font-semibold">(필수)</span>
+                    </span>
+                  </label>
+                  <p className="mt-1.5 pl-7 text-[11px] leading-relaxed text-gray-500">
+                    상세 공개 범위는 가입 후{' '}
+                    <Link
+                      href="/profile/edit"
+                      className="text-orange-500 hover:underline font-medium"
+                    >
+                      마이페이지
+                    </Link>{' '}
+                    {' > '}{' '}
+                    <Link
+                      href="/profile/edit"
+                      className="text-orange-500 hover:underline font-medium"
+                    >
+                      프로필 설정
+                    </Link>
+                    에서 언제든지 관리할 수 있습니다.
+                  </p>
+                </div>
+              )}
+
               <div className="flex gap-3 mt-2">
                 <button
                   type="button"
@@ -300,7 +365,7 @@ export default function SignupPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={loading}
+                  disabled={submitDisabled}
                   className="flex-1 text-white font-semibold py-3 rounded-xl transition-all active:scale-95 disabled:opacity-60"
                   style={{ backgroundColor: 'var(--brand)' }}
                 >
@@ -310,7 +375,6 @@ export default function SignupPage() {
             </form>
           </>
         )}
-
         <p className="text-sm text-center text-gray-500 mt-6">
           이미 계정이 있으신가요?{' '}
           <Link href="/login" className="font-semibold text-orange-500 hover:underline">
