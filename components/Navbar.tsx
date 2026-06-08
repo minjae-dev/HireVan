@@ -3,6 +3,7 @@
 import { useAuth } from '@/lib/auth-context'
 import Link from 'next/link'
 import { usePathname, useRouter } from 'next/navigation'
+import NavbarNotificationBell from '@/components/NavbarNotificationBell'
 
 export default function Navbar() {
   const { user, profile, signOut, loading } = useAuth()
@@ -24,7 +25,7 @@ export default function Navbar() {
         {loading ? (
           <div className="w-16 h-8 bg-gray-100 rounded animate-pulse" />
         ) : user && profile ? (
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 sm:gap-4">
             {profile.role === 'employer' ? (
               <>
                 <Link
@@ -74,6 +75,13 @@ export default function Navbar() {
                 </Link>
               </>
             )}
+            <Link
+              href="/notifications"
+              className={`text-sm font-medium ${pathname.startsWith('/notifications') ? 'text-orange-500' : 'text-gray-600'}`}
+            >
+              알림
+            </Link>
+            <NavbarNotificationBell />
             <Link
               href="/profile"
               className={`text-sm font-medium ${pathname === '/profile' ? 'text-orange-500' : 'text-gray-600'}`}

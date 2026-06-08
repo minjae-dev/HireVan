@@ -703,6 +703,126 @@ export interface Database {
         }
         Relationships: []
       }
+      push_tokens: {
+        Row: {
+          id: string
+          user_id: string
+          token: string
+          platform: 'web' | 'ios' | 'android'
+          device_label: string | null
+          is_active: boolean
+          last_seen_at: string
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          token: string
+          platform: 'web' | 'ios' | 'android'
+          device_label?: string | null
+          is_active?: boolean
+          last_seen_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          token?: string
+          platform?: 'web' | 'ios' | 'android'
+          device_label?: string | null
+          is_active?: boolean
+          last_seen_at?: string
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      notification_logs: {
+        Row: {
+          id: string
+          user_id: string
+          type: string
+          title: string
+          body: string | null
+          payload: Json
+          status: 'queued' | 'sending' | 'sent' | 'failed' | 'skipped'
+          attempts: number
+          last_error: string | null
+          dedupe_key: string | null
+          sent_at: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          id?: string
+          user_id: string
+          type: string
+          title: string
+          body?: string | null
+          payload?: Json
+          status?: 'queued' | 'sending' | 'sent' | 'failed' | 'skipped'
+          attempts?: number
+          last_error?: string | null
+          dedupe_key?: string | null
+          sent_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          id?: string
+          user_id?: string
+          type?: string
+          title?: string
+          body?: string | null
+          payload?: Json
+          status?: 'queued' | 'sending' | 'sent' | 'failed' | 'skipped'
+          attempts?: number
+          last_error?: string | null
+          dedupe_key?: string | null
+          sent_at?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      notification_prefs: {
+        Row: {
+          user_id: string
+          chat_room_created: boolean
+          chat_new_message: boolean
+          push_enabled: boolean
+          email_enabled: boolean
+          quiet_hours_start: string | null
+          quiet_hours_end: string | null
+          created_at: string
+          updated_at: string
+        }
+        Insert: {
+          user_id: string
+          chat_room_created?: boolean
+          chat_new_message?: boolean
+          push_enabled?: boolean
+          email_enabled?: boolean
+          quiet_hours_start?: string | null
+          quiet_hours_end?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Update: {
+          user_id?: string
+          chat_room_created?: boolean
+          chat_new_message?: boolean
+          push_enabled?: boolean
+          email_enabled?: boolean
+          quiet_hours_start?: string | null
+          quiet_hours_end?: string | null
+          created_at?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       profiles_public: {
