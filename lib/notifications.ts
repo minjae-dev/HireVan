@@ -15,8 +15,8 @@
  *  3) 메시지/채팅방 API helper
  */
 
-import { useEffect, useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { useCallback, useEffect, useState } from 'react'
 
 // ──────────────────────────────────────────────────────────────────────
 // 타입 — 백엔드 notification_logs.payload 와 1:1
@@ -176,10 +176,10 @@ export async function fetchInitialNotifications(): Promise<ChatNotification[]> {
  */
 export async function markNotificationRead(id: string): Promise<void> {
   const now = new Date().toISOString()
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data, error } = await supabase
     .from('notification_logs')
-    .update({ read_at: now } as unknown as Record<string, unknown>)
+    .update({ read_at: now } as Record<string, any>)
     .eq('id', id)
     .is('read_at', null)
     .select('id, read_at')
@@ -206,7 +206,7 @@ export async function markNotificationRead(id: string): Promise<void> {
 export async function markAllRead(): Promise<void> {
   const now = new Date().toISOString()
   // 1) self RLS 가 있는 경우 anon key 로 자기 row 만 일괄 업데이트
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const { data, error } = await supabase
     .from('notification_logs')
     .update({ read_at: now } as unknown as Record<string, unknown>)
