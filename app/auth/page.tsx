@@ -39,12 +39,25 @@ function AuthInner() {
     email: '',
     password: '',
   })
+  // 구직자 전용 — 프로필 정보 공개 동의 (필수)
+  // 채용자(employer) 모드에서는 이 값이 사용되지도, 렌더링되지도 않는다.
+  const [privacyConsent, setPrivacyConsent] = useState(false)
+
+  const isSeeker = type === 'seeker'
+  const submitDisabled = loading || (isSeeker && !privacyConsent)
 
   const handleSignUp = async (e: React.FormEvent) => {
     e.preventDefault()
 
     if (!formData.nameOrShop || !formData.email || !formData.password) {
       alert('모든 정보를 입력해주세요.')
+      return
+    }
+
+    // 구직자 동의가 체크되지 않은 상태에서 submit 이 호출되면 막는다.
+    // (button disabled 만으로는 devtools 조작 등을 완전히 막을 수 없어서 방어 로직 추가)
+    if (isSeeker && !privacyConsent) {
+      alert('프로필 정보 공개에 동의해야 가입할 수 있습니다.')
       return
     }
 
@@ -136,9 +149,51 @@ function AuthInner() {
           value={formData.password}
           onChange={e => setFormData({ ...formData, password: e.target.value })}
         />
+
+        {/* ── 구직자 전용: 프로필 정보 공개 동의 (필수) ──
+             - 랜딩페이지에서 /auth?type=seeker 로 진입한 경우에만 렌더링
+             - 채용자(employer) 모드에서는 이 영역이 아예 렌더링되지 않으며,
+               체크 상태와 무관하게 '가입하기' 버튼이 정상 작동한다. */}
+        {isSeeker && (
+          <div className="text-left rounded-2xl border border-gray-200 bg-gray-50/60 px-4 py-3">
+            <label className="flex items-start gap-2.5 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={privacyConsent}
+                onChange={e => setPrivacyConsent(e.target.checked)}
+                required
+                aria-required="true"
+                className="mt-0.5 h-4 w-4 flex-shrink-0 rounded border-gray-300 text-orange-500 focus:ring-orange-400"
+              />
+              <span className="text-xs leading-relaxed text-gray-700">
+                채용 매칭을 위해 비자 상태, 경력 사항, 거주 지역 등 프로필 정보가
+                기업 채용 담당자에게 공개되는 것에 동의합니다.{' '}
+                <span className="text-red-500 font-semibold">(필수)</span>
+              </span>
+            </label>
+            <p className="mt-1.5 pl-7 text-[11px] leading-relaxed text-gray-500">
+              상세 공개 범위는 가입 후{' '}
+              <Link
+                href="/profile/edit"
+                className="text-orange-500 hover:underline font-medium"
+              >
+                마이페이지
+              </Link>{' '}
+              {' > '}{' '}
+              <Link
+                href="/profile/edit"
+                className="text-orange-500 hover:underline font-medium"
+              >
+                프로필 설정
+              </Link>
+              에서 언제든지 관리할 수 있습니다.
+            </p>
+          </div>
+        )}
+
         <button
           type="submit"
-          disabled={loading}
+          disabled={submitDisabled}
           className="w-full mt-6 py-4 rounded-2xl text-white font-bold disabled:opacity-60"
           style={{ backgroundColor: copy.accent }}
         >
