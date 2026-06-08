@@ -3,7 +3,8 @@
 import { useAuth } from '@/lib/auth-context'
 import { supabase } from '@/lib/supabase'
 import { useRouter } from 'next/navigation'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { usePollProUpgrade } from '@/lib/usePollProUpgrade'
 
 const LOCATION_OPTIONS = [
   '다운타운',
@@ -40,6 +41,54 @@ export default function NewJobPage() {
   const [requireResume, setRequireResume] = useState(false)
   const [customQuestions, setCustomQuestions] = useState<CustomQuestion[]>([])
   const [newQuestion, setNewQuestion] = useState('')
+
+  // ── Pro 체험 활성화 폴링 (첫 공고 등록 시 자동 Pro 부상감지) ──
+  //   - 등록 직전 employer 가 Pro 가 아니었다면 (= 이번 공고가 첫 공고)
+  //     DB 트리거가 profiles 를 pro 로 승격시키는데, 이때까지 race condition
+  //     없이 인메모리 profile 상태를 동기화한다.
+  //   - activated 시: 베너 표시 + /api/notify/pro-activated 1회 호출
+  //   - 이미 Pro 였던 유저(유료 구독 등)거나 첫 공고가 아니면 폴링 자체를
+  //     트리거하지 않음 (베너도 안 뜸)
+
+  // 이번에 등록하는 공고가 '첫 공고' 인가 (= 등록 전 Pro 가 아니었는가)
+  const isLikelyFirstJob =
+    profile?.role === 'employer' &&
+    profile?.pro_subscriber !== true &&
+    profile?.plan !== 'pro'
+
+  // 이번 세션에서 막 INSERT 한 job 의 id (useEffect 와 handleSubmit 가 공유)
+  const [lastInsertedJobId, setLastInsertedJobId] = useState<string | null>(null)
+  // Pro 활성화 안내(이용자 노출) 시 1회만 트리거하도록 가드
+  const proUpgradeAnnouncedRef = useRef(false)
+
+  const poll = usePollProUpgrade({ manual: true, maxDurationMs: 8000 })
+  const proJustActivated = poll.status === 'active'
+
+  // Pro 가 막 활성화됐을 때: 1) 베너 표시 2) 알림 큐에 1 row INSERT
+  useEffect(() => {
+    if (!proJustActivated) return
+    if (proUpgradeAnnouncedRef.current) return
+    proUpgradeAnnouncedRef.current = true
+
+    // notification_logs 큐에 등록
+    const jobId = lastInsertedJobId
+    if (jobId && user) {
+      void supabase.auth.getSession().then(({ data }) => {
+        const accessToken = data.session?.access_token
+        if (!accessToken) return
+        void fetch('/api/notify/pro-activated', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            authorization: 'Bearer ' + accessToken,
+          },
+          body: JSON.stringify({ job_id: jobId }),
+        }).catch((e) => {
+          console.warn('[NewJobPage] notify/pro-activated failed', e)
+        })
+      })
+    }
+  }, [proJustActivated, user, lastInsertedJobId])
 
   if (!profile || profile.role !== 'employer') {
     return (
@@ -81,7 +130,34 @@ export default function NewJobPage() {
       return
     }
 
-    router.push(`/jobs/${(data as { id: string }).id}`)
+    const insertedJobId = (data as { id: string }).id
+    setLastInsertedJobId(insertedJobId)
+
+    // 다음 페이지(job 상세)에서 더 큰 축하 화면을 띄울 수 있도록 힌트를
+    // sessionStorage 에 남겨둔다.
+    if (isLikelyFirstJob && typeof window !== 'undefined') {
+      try {
+        window.sessionStorage.setItem('hv:proJustActivated', '1')
+      } catch {
+        // sessionStorage 사용 불가 환경(SSR, private mode)에서는 무시
+      }
+    }
+
+    // '첫 공고' 시나리오였다면 폴링을 시작해서
+    // DB 트리거가 profiles 를 pro 로 승격시킨 시점을 감지한다.
+    if (isLikelyFirstJob) {
+      proUpgradeAnnouncedRef.current = false
+      poll.start()
+      // 축하 베너를 잠시 보여준 뒤 라우팅한다.
+      // 폴링이 active 가 되는 순간 베너가 렌더되고, 최소 1.5초는 보이도록.
+      setTimeout(() => {
+        router.push(`/jobs/${insertedJobId}`)
+      }, 1800)
+      return
+    }
+
+    // 이미 Pro 였거나 첫 공고가 아닌 경우: 바로 라우팅
+    router.push(`/jobs/${insertedJobId}`)
   }
 
   // Today's date string for min on deadline picker
@@ -96,6 +172,14 @@ export default function NewJobPage() {
           상세하게 작성할수록 좋은 지원자를 만날 수 있어요 ✨
         </p>
       </div>
+
+      {/* 첫 공고 축하 베너 — Pro 가 자동으로 활성화될 때 표시
+          (pending: 동기화 중 / active: 활성화됨) */}
+      {lastInsertedJobId && (proJustActivated || poll.status === 'pending') && (
+        <ProUpgradeCelebration
+          status={proJustActivated ? 'active' : 'pending'}
+        />
+      )}
 
       <div className="bg-white rounded-2xl border border-gray-100 p-6">
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
@@ -385,5 +469,73 @@ function PreviewTag({ icon, text }: { icon: string; text: string }) {
     <span className="inline-flex items-center gap-1 text-xs text-gray-500 bg-white border border-gray-100 rounded-full px-2.5 py-1">
       {icon} {text}
     </span>
+  )
+}
+
+/**
+ * ProUpgradeCelebration
+ * 첫 공고 등록 직후 DB 트리거에 의해 Pro 가 활성화되는 과정을 시각적으로 알리는 베너.
+ *  - status='pending' : 구독 상태 동기화 중 (스피너 + 메시지)
+ *  - status='active'  : 활성화 감지됨 (축하 아이콘 + 30일 체험 안내)
+ */
+function ProUpgradeCelebration({ status }: { status: 'pending' | 'active' }) {
+  if (status === 'active') {
+    return (
+      <div
+        className="mb-4 rounded-2xl border-2 border-orange-300 bg-gradient-to-br from-orange-50 to-amber-50 p-5 shadow-sm"
+        role="status"
+        aria-live="polite"
+      >
+        <div className="flex items-start gap-3">
+          <div className="text-3xl" aria-hidden>
+            🎉
+          </div>
+          <div className="flex-1 min-w-0">
+            <p className="text-base font-bold text-orange-900">
+              Pro 플랜이 활성화됐어요!
+            </p>
+            <p className="text-sm text-orange-800 mt-1 leading-relaxed">
+              공고가 등록되었습니다. 앞으로 <strong>30일간</strong> HireVan Pro의
+              모든 기능을 무료로 사용하실 수 있어요.
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2 text-xs">
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/80 border border-orange-200 px-3 py-1 text-orange-800">
+                ✨ 구직자 연락처 전체 보기
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/80 border border-orange-200 px-3 py-1 text-orange-800">
+                ⚡ 매칭 추천 무제한
+              </span>
+              <span className="inline-flex items-center gap-1 rounded-full bg-white/80 border border-orange-200 px-3 py-1 text-orange-800">
+                🚀 공고 상단 노출
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // pending
+  return (
+    <div
+      className="mb-4 rounded-2xl border border-orange-200 bg-orange-50/60 p-4"
+      role="status"
+      aria-live="polite"
+    >
+      <div className="flex items-center gap-3">
+        <span
+          className="inline-block h-5 w-5 rounded-full border-2 border-orange-300 border-t-orange-500 animate-spin"
+          aria-hidden
+        />
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium text-orange-900">
+            첫 공고 등록 축하드립니다! Pro 체험 활성화 중…
+          </p>
+          <p className="text-xs text-orange-700 mt-0.5">
+            잠시만 기다려 주세요. 구독 정보를 동기화하고 있어요.
+          </p>
+        </div>
+      </div>
+    </div>
   )
 }
