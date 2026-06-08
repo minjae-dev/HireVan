@@ -236,7 +236,9 @@ export default function ProUpsellModal({
         </button>
 
         <p className="mt-3 text-center text-[11px] text-gray-400">
-          결제는 Stripe Checkout으로 안전하게 처리됩니다 · 환불은 Billing Portal에서 요청 가능
+          모든 결제는 Stripe Checkout을 통해 안전하게 처리됩니다.<br></br>
+서비스 특성상 결제 완료 후에는 환불이 어려우나, 구독 취소는 Billing Portal에서 언제든 직접 요청하실 수 있습니다.
+구독을 취소하더라도 결제하신 기간까지는 프리미엄 서비스를 정상적으로 이용 가능합니다.
         </p>
       </div>
     </div>
