@@ -179,7 +179,7 @@ export async function markNotificationRead(id: string): Promise<void> {
    
   const { data, error } = await supabase
     .from('notification_logs')
-    .update({ read_at: now } as Record<string, any>)
+    .update({ read_at: now } as any)
     .eq('id', id)
     .is('read_at', null)
     .select('id, read_at')
@@ -209,7 +209,7 @@ export async function markAllRead(): Promise<void> {
    
   const { data, error } = await supabase
     .from('notification_logs')
-    .update({ read_at: now } as unknown as Record<string, unknown>)
+    .update({ read_at: now } as any)
     .is('read_at', null)
     .select('id')
 
