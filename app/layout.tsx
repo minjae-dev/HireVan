@@ -7,10 +7,43 @@ import './globals.css'
 
 
 export const metadata: Metadata = {
-  title: 'HireVan — 밴쿠버 한인 구인구직',
-  description: '밴쿠버 한인 영세업체 × 워홀러 구인구직 플랫폼',
+  title: {
+    default: 'HireVan — 밴쿠버 한인 채용 플랫폼',
+    template: '%s | HireVan',
+  },
+  description: '채팅으로 바로 연락, 면접 약속까지 한 번에. 밴쿠버 한인을 위한 구인구직 플랫폼',
+  keywords: ['밴쿠버 구인구직', '밴쿠버 알바', '한인 채용', '워홀 취업', '밴쿠버 워킹홀리데이', 'Vancouver Korean jobs', 'HireVan'],
+  authors: [{ name: 'HireVan' }],
+  metadataBase: new URL('https://www.hire-van.com'),
+  openGraph: {
+    title: 'HireVan — 밴쿠버 한인 채용 플랫폼',
+    description: '채팅으로 바로 연락, 면접 약속까지 한 번에. 밴쿠버 한인을 위한 채용 플랫폼.',
+    url: 'https://www.hire-van.com',
+    siteName: 'HireVan',
+    images: [
+      {
+        url: '/og-image.png', // 1200x630 이미지 만들어서 public에 넣으세요
+        width: 1200,
+        height: 630,
+        alt: 'HireVan 밴쿠버 한인 채용 플랫폼',
+      },
+    ],
+    locale: 'ko_KR',
+    type: 'website',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'HireVan — 밴쿠버 한인 채용',
+    description: '채팅으로 바로 연락하고 면접 약속까지, 밴쿠버 한인 채용 플랫폼',
+    images: ['/og-image.jpg'],
+  },
   icons: {
-    icon: "/favicon.ico", // public 폴더 기준 경로
+    icon: '/favicon.ico',
+    apple: '/apple-touch-icon.png', // 180x180
+  },
+  robots: {
+    index: true,
+    follow: true,
   },
 }
 

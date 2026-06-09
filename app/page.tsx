@@ -1,5 +1,6 @@
 'use client'
 
+import EventPopup from '@/components/EventPopup'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
@@ -193,6 +194,25 @@ export default function LandingPage() {
       <footer className="mt-16 pb-6 text-center text-xs text-gray-400">
         © HireVan · 밴쿠버 한인 커뮤니티를 위해
       </footer>
+
+      {/* ───── Event Popup (첫 공고 무료 이벤트) ────
+       *  - storageKey 를 이벤트별로 다르게 주면, 한 페이지에서
+       *    여러 종류의 팝업을 동시에 운용할 수 있다.
+       *  - "1주일간 보지 않기" 체크박스는 기본 노출.
+       *    끄고 싶으면 hideCheckboxLabel={false} 로 주면 된다.
+       */}
+      <EventPopup
+        title="🎉채용계정 신규 가입 이벤트🎉"
+        description={`가입 후 첫 구인공고를 올리면 Pro 멤버십 1개월이 무료!\n이력서 요청 + 사전질문까지, 맞춤 지원자와 채팅하세요.`}
+        imageSrc="/event/first-job-free.png"
+        imageAlt="첫 공고 무료 이벤트 배너"
+        buttonText="공고 올리고 Pro 받기"
+        storageKey="event:first-job-free:dismissed"
+        onButtonClick={() => {
+          // CTA 클릭 시 페이지 내 안내 섹션으로 스크롤 등 원하는 동작
+          window.location.href = '/employer/jobs/new'
+        }}
+      />
     </div>
   )
 }
@@ -214,13 +234,11 @@ function DynamicContent({
       <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
         {/* GIF placeholder */}
         {/* 수정된 부분: Placeholder div 대신 img 태그 사용 */}
-        <div
-          className="relative w-full aspect-[16/9] sm:aspect-[21/9] flex items-center justify-center overflow-hidden bg-gray-50"
-        >
+        <div className="relative w-full h-40"> {/* h-48 → h-40 */}
           <img
             src={config.imagePath}
             alt={`${config.label} 가이드`}
-            className="w-full h-full object-contain" // object-cover에서 수정
+            className="w-full h-full object-contain p-2"
           />
 
           {/* 우측 상단 태그는 그대로 유지 */}
