@@ -6,8 +6,43 @@ import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 
-const CATEGORIES = ['카페', '식당', '네일숍', '편의점', '소매점', '청소용역', '배송', '기타']
-const LOCATIONS = ['다운타운', '버나비', '서리', '코퀴틀람', '리치몬드', '노스밴쿠버', '기타']
+const CATEGORIES = [
+  { value: '식당', label: '식당' },
+  { value: '카페', label: '카페' },
+  { value: 'office-accounting', label: '사무/회계' },
+  { value: 'sales-consultation', label: '영업/상담' },
+  { value: 'retail-dealership', label: '유통/판매' },
+  { value: 'shipping-logistics', label: '배송/물류' },
+  { value: 'production-tech', label: '생산/기술' },
+  { value: 'construction', label: '건설/토목' },
+  { value: 'care-cleaning', label: '돌봄/청소' },
+  { value: 'it-design', label: 'IT/디자인' },
+  { value: 'beauty-ceremony', label: '미용/예식' },
+  { value: 'healthcare', label: '간호/의료' },
+  { value: 'teaching-lecturer', label: '교육/강사' },
+  { value: 'etc', label: '기타' },
+] as const
+const LOCATIONS = [
+  { value: '5', label: '밴쿠버' },
+  { value: '1', label: '버나비' },
+  { value: '2', label: '코퀴틀람' },
+  { value: '4', label: '써리' },
+  { value: '11', label: '랭리' },
+  { value: '14', label: '포트코퀴틀람' },
+  { value: '6', label: '노스밴쿠버' },
+  { value: '7', label: '웨스트밴쿠버' },
+  { value: '3', label: '포트무디' },
+  { value: '9', label: '리치몬드' },
+  { value: '12', label: '델타' },
+  { value: '15', label: '뉴웨스터민스터' },
+  { value: '8', label: '메이플릿지' },
+  { value: '10', label: '화이트락' },
+  { value: '16', label: '핏메도우' },
+  { value: '17', label: '재스퍼' },
+  { value: '19', label: '아보츠포드' },
+  { value: '20', label: '킬로나' },
+  { value: '13', label: '기타' },
+] as const
 
 const LOCATION_ALIASES: Record<string, string[]> = {
   '다운타운': ['다운타운', 'downtown', 'dt', 'vancouver downtown', 'downtown vancouver', '시내'],
@@ -32,12 +67,19 @@ function matchLocation(jobLocation: string, selectedLocations: string[]): boolea
   if (selectedLocations.length === 0) return true
   const jobLoc = (jobLocation || '').toLowerCase().trim()
   if (!jobLoc) return false
-  return selectedLocations.some(selected => {
-    const aliases = LOCATION_ALIASES[selected] ?? [selected.toLowerCase()]
+  
+  return selectedLocations.some(selectedId => {
+    // 1. 선택된 숫자 ID(예: '1')에 해당하는 한글 이름(예: '버나비')을 찾습니다.
+    const locationObj = LOCATIONS.find(l => l.value === selectedId)
+    const krName = locationObj ? locationObj.label : ''
+    
+    // 2. 한글 이름으로 맵에서 Alias 배열을 꺼내고, 없다면 고유 ID 혹은 한글 이름 자체를 배열로 둡니다.
+    const aliases = LOCATION_ALIASES[krName] ?? [selectedId.toLowerCase()]
+    
+    // 3. 공고 텍스트에 포함되어 있는지 비교 검증
     return aliases.some(alias => jobLoc.includes(alias.toLowerCase()))
   })
 }
-
 export default function SeekerDashboardPage() {
   const { user, profile, loading: authLoading } = useAuth()
   const [matches, setMatches] = useState<JobMatchResult[]>([])
@@ -222,20 +264,38 @@ export default function SeekerDashboardPage() {
               <p className="mb-2 text-xs font-semibold text-gray-600">희망 업종 (중복 선택 가능)</p>
               <div className="flex flex-wrap gap-2">
                 {CATEGORIES.map(cat => (
-                  <button key={cat} type="button" onClick={() => toggleCategory(cat)}
-                    className={`rounded-full px-3.5 py-2 text-xs font-bold transition-all ${formCategories.includes(cat) ? 'bg-orange-500 text-white shadow-md' : 'border border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'}`}
-                  >{cat}</button>
-                ))}
+                <button 
+                  key={cat.value} 
+                  type="button" 
+                  onClick={() => toggleCategory(cat.value)}
+                  className={`rounded-full px-3.5 py-2 text-xs font-bold transition-all ${
+                    formCategories.includes(cat.value) 
+                      ? 'bg-orange-500 text-white shadow-md' 
+                      : 'border border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              ))}
               </div>
             </div>
             <div>
               <p className="mb-2 text-xs font-semibold text-gray-600">희망 지역 (중복 선택 가능)</p>
               <div className="flex flex-wrap gap-2">
                 {LOCATIONS.map(loc => (
-                  <button key={loc} type="button" onClick={() => toggleLocation(loc)}
-                    className={`rounded-full px-3.5 py-2 text-xs font-bold transition-all ${formLocations.includes(loc) ? 'bg-orange-500 text-white shadow-md' : 'border border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'}`}
-                  >{loc}</button>
-                ))}
+                <button 
+                  key={loc.value} 
+                  type="button" 
+                  onClick={() => toggleLocation(loc.value)}
+                  className={`rounded-full px-3.5 py-2 text-xs font-bold transition-all ${
+                    formLocations.includes(loc.value) 
+                      ? 'bg-orange-500 text-white shadow-md' 
+                      : 'border border-gray-200 bg-gray-50 text-gray-600 hover:border-gray-300'
+                  }`}
+                >
+                  {loc.label}
+                </button>
+              ))}  
               </div>
             </div>
             <div className="grid grid-cols-2 gap-4">

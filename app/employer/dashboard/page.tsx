@@ -20,13 +20,25 @@ type JobPost = Database['public']['Tables']['job_posts']['Row']
 // 필터 옵션 (한국 밴쿠버 채용 시장 기준)
 // ---------------------------------------------------------------------------
 const NEIGHBORHOOD_OPTIONS = [
-  '다운타운',
-  '버나비',
-  '서리',
-  '코퀴틀람',
-  '리치몬드',
-  '노스밴쿠버',
-  '기타',
+  { value: '5', label: '밴쿠버' },
+  { value: '1', label: '버나비' },
+  { value: '2', label: '코퀴틀람' },
+  { value: '4', label: '써리' },
+  { value: '11', label: '랭리' },
+  { value: '14', label: '포트코퀴틀람' },
+  { value: '6', label: '노스밴쿠버' },
+  { value: '7', label: '웨스트밴쿠버' },
+  { value: '3', label: '포트무디' },
+  { value: '9', label: '리치몬드' },
+  { value: '12', label: '델타' },
+  { value: '15', label: '뉴웨스터민스터' },
+  { value: '8', label: '메이플릿지' },
+  { value: '10', label: '화이트락' },
+  { value: '16', label: '핏메도우' },
+  { value: '17', label: '재스퍼' },
+  { value: '19', label: '아보츠포드' },
+  { value: '20', label: '킬로나' },
+  { value: '13', label: '기타' },
 ] as const
 
 const CERT_OPTIONS = [
@@ -310,10 +322,10 @@ export default function EmployerDashboardPage() {
               >
                 <option value="">전체 보기</option>
                 {NEIGHBORHOOD_OPTIONS.map(n => (
-                  <option key={n} value={n}>
-                    {n}
-                  </option>
-                ))}
+                    <option key={n.value} value={n.value}>
+                      {n.label}
+                    </option>
+                  ))}
               </select>
             </div>
             <div>

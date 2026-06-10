@@ -9,16 +9,28 @@ type Role = 'employer' | 'seeker'
 
 const VISA_OPTIONS = ['워킹홀리데이', '학생비자', '취업비자', '영주권/시민권', '기타']
 
+// 변경: 고유 식별 번호로 매핑된 객체 구조로 대체
 const NEIGHBORHOOD_OPTIONS = [
-  '다운타운',
-  '버나비',
-  '서리',
-  '코퀴틀람',
-  '리치몬드',
-  '노스밴쿠버',
-  '기타',
-]
-
+  { value: '5', label: '밴쿠버' },
+  { value: '1', label: '버나비' },
+  { value: '2', label: '코퀴틀람' },
+  { value: '4', label: '써리' },
+  { value: '11', label: '랭리' },
+  { value: '14', label: '포트코퀴틀람' },
+  { value: '6', label: '노스밴쿠버' },
+  { value: '7', label: '웨스트밴쿠버' },
+  { value: '3', label: '포트무디' },
+  { value: '9', label: '리치몬드' },
+  { value: '12', label: '델타' },
+  { value: '15', label: '뉴웨스터민스터' },
+  { value: '8', label: '메이플릿지' },
+  { value: '10', label: '화이트락' },
+  { value: '16', label: '핏메도우' },
+  { value: '17', label: '재스퍼' },
+  { value: '19', label: '아보츠포드' },
+  { value: '20', label: '킬로나' },
+  { value: '13', label: '기타' },
+] as const
 /**
  * 회원가입 페이지는 항상 step 1(역할 선택)에서 시작한다.
  * 랜딩페이지에서 별도의 URL 파라미터 없이 진입해도 폼이 자연스럽게 동작하도록
@@ -102,6 +114,23 @@ function SignupForm() {
       setError('프로필 생성에 실패했습니다. 다시 시도해주세요.')
       setLoading(false)
       return
+    }
+
+    // ── 환영 이메일 + 인앱알림 발송 (비동기 fire-and-forget) ──
+    try {
+      void fetch('/api/emails/welcome', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          user_id: data.user.id,
+          email,
+          name,
+          role,
+        }),
+      })
+    } catch (e) {
+      // 이메일 발송 실패는 회원가입 흐름에 영향을 주지 않음
+      console.warn('[signup] welcome email failed', e)
     }
 
     router.push('/')
@@ -264,7 +293,9 @@ function SignupForm() {
                     >
                       <option value="">선택해주세요</option>
                       {NEIGHBORHOOD_OPTIONS.map(n => (
-                        <option key={n} value={n}>{n}</option>
+                        <option key={n.value} value={n.value}>
+                          {n.label}
+                        </option>
                       ))}
                     </select>
                   </div>

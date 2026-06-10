@@ -6,8 +6,43 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
-const LOCATION_OPTIONS = ['다운타운', '버나비', '서리', '코퀴틀람', '리치몬드', '노스밴쿠버', '기타']
-const JOB_TYPE_OPTIONS = ['카페', '식당', '네일숍', '편의점', '소매점', '청소용역', '배송', '기타']
+const LOCATION_OPTIONS =  [
+  { value: '5', label: '밴쿠버' },
+  { value: '1', label: '버나비' },
+  { value: '2', label: '코퀴틀람' },
+  { value: '4', label: '써리' },
+  { value: '11', label: '랭리' },
+  { value: '14', label: '포트코퀴틀람' },
+  { value: '6', label: '노스밴쿠버' },
+  { value: '7', label: '웨스트밴쿠버' },
+  { value: '3', label: '포트무디' },
+  { value: '9', label: '리치몬드' },
+  { value: '12', label: '델타' },
+  { value: '15', label: '뉴웨스터민스터' },
+  { value: '8', label: '메이플릿지' },
+  { value: '10', label: '화이트락' },
+  { value: '16', label: '핏메도우' },
+  { value: '17', label: '재스퍼' },
+  { value: '19', label: '아보츠포드' },
+  { value: '20', label: '킬로나' },
+  { value: '13', label: '기타' },
+] as const
+const JOB_TYPE_OPTIONS = [
+  { value: '식당', label: '식당' },
+  { value: '카페', label: '카페' },
+  { value: 'office-accounting', label: '사무/회계' },
+  { value: 'sales-consultation', label: '영업/상담' },
+  { value: 'retail-dealership', label: '유통/판매' },
+  { value: 'shipping-logistics', label: '배송/물류' },
+  { value: 'production-tech', label: '생산/기술' },
+  { value: 'construction', label: '건설/토목' },
+  { value: 'care-cleaning', label: '돌봄/청소' },
+  { value: 'it-design', label: 'IT/디자인' },
+  { value: 'beauty-ceremony', label: '미용/예식' },
+  { value: 'healthcare', label: '간호/의료' },
+  { value: 'teaching-lecturer', label: '교육/강사' },
+  { value: 'etc', label: '기타' },
+] as const
 const MAX_QUESTIONS_FREE = 3
 const MAX_QUESTIONS_PRO = 5
 
@@ -228,15 +263,18 @@ export default function EmployerNewJobPage() {
             <label className="block text-sm font-semibold text-gray-900 mb-2">
               근무 위치 <span className="text-red-500">*</span>
             </label>
-            <select
+           <select
               name="location"
-              value={formData.location}
+              value={formData.location} // 선택 시 formData.location에 '1', '2' 같은 숫자 ID 문자열이 담깁니다.
               onChange={handleChange}
               className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent transition-all"
             >
               <option value="">선택해주세요</option>
+              {/* 정의하신 배열 상수명(LOCATIONS 또는 NEIGHBORHOOD_OPTIONS)에 맞게 매핑하세요 */}
               {LOCATION_OPTIONS.map(loc => (
-                <option key={loc} value={loc}>{loc}</option>
+                <option key={loc.value} value={loc.value}>
+                  {loc.label}
+                </option>
               ))}
             </select>
           </div>
@@ -253,8 +291,10 @@ export default function EmployerNewJobPage() {
             >
               <option value="">선택해주세요</option>
               {JOB_TYPE_OPTIONS.map(type => (
-                <option key={type} value={type}>{type}</option>
-              ))}
+                  <option key={type.value} value={type.value}>
+                    {type.label}
+                  </option>
+                ))}
             </select>
           </div>
         </div>

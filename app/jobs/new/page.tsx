@@ -2,21 +2,48 @@
 
 import { useAuth } from '@/lib/auth-context'
 import { supabase } from '@/lib/supabase'
+import { usePollProUpgrade } from '@/lib/usePollProUpgrade'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
-import { usePollProUpgrade } from '@/lib/usePollProUpgrade'
 
-const LOCATION_OPTIONS = [
-  '다운타운',
-  '버나비',
-  '서리',
-  '코퀴틀람',
-  '리치몬드',
-  '노스밴쿠버',
-  '기타',
-]
-
-const CATEGORY_OPTIONS = ['카페', '식당', '네일숍', '편의점', '기타']
+const LOCATION_OPTIONS =  [
+  { value: '5', label: '밴쿠버' },
+  { value: '1', label: '버나비' },
+  { value: '2', label: '코퀴틀람' },
+  { value: '4', label: '써리' },
+  { value: '11', label: '랭리' },
+  { value: '14', label: '포트코퀴틀람' },
+  { value: '6', label: '노스밴쿠버' },
+  { value: '7', label: '웨스트밴쿠버' },
+  { value: '3', label: '포트무디' },
+  { value: '9', label: '리치몬드' },
+  { value: '12', label: '델타' },
+  { value: '15', label: '뉴웨스터민스터' },
+  { value: '8', label: '메이플릿지' },
+  { value: '10', label: '화이트락' },
+  { value: '16', label: '핏메도우' },
+  { value: '17', label: '재스퍼' },
+  { value: '19', label: '아보츠포드' },
+  { value: '20', label: '킬로나' },
+  { value: '13', label: '기타' },
+] as const
+// page.tsx 상단 선언부 수정
+const CATEGORY_OPTIONS = [
+  { value: '식당', label: '식당' },
+  { value: '카페', label: '카페' },
+  { value: 'office-accounting', label: '사무/회계' },
+  { value: 'sales-consultation', label: '영업/상담' },
+  { value: 'retail-dealership', label: '유통/판매' },
+  { value: 'shipping-logistics', label: '배송/물류' },
+  { value: 'production-tech', label: '생산/기술' },
+  { value: 'construction', label: '건설/토목' },
+  { value: 'care-cleaning', label: '돌봄/청소' },
+  { value: 'it-design', label: 'IT/디자인' },
+  { value: 'beauty-ceremony', label: '미용/예식' },
+  { value: 'healthcare', label: '간호/의료' },
+  { value: 'teaching-lecturer', label: '교육/강사' },
+  { value: 'etc', label: '기타' },
+] as const
 
 type CustomQuestion = {
   id: string
@@ -201,24 +228,24 @@ export default function NewJobPage() {
             <div className="flex flex-wrap gap-2">
               {CATEGORY_OPTIONS.map(opt => (
                 <button
-                  key={opt}
+                  key={opt.value} // opt 대신 고유한 value를 key로 사용
                   type="button"
-                  onClick={() => setCategory(opt)}
+                  onClick={() => setCategory(opt.value)} // 클릭 시 DB에 저장될 value(코드값)를 저장
                   className={`px-4 py-2 rounded-full text-sm font-medium border transition-all active:scale-95 ${
-                    category === opt
+                    category === opt.value // 선택 여부 비교도 value 기준으로 변경
                       ? 'text-white border-transparent'
                       : 'text-gray-600 border-gray-200 bg-white hover:border-gray-300'
                   }`}
                   style={
-                    category === opt
+                    category === opt.value
                       ? { backgroundColor: 'var(--brand)', borderColor: 'var(--brand)' }
                       : {}
                   }
                 >
-                  {opt}
+                  {opt.label} {/* 화면에는 사용자가 알아보기 쉽게 한글 이름을 출력 */}
                 </button>
               ))}
-            </div>
+</div>
             {/* hidden required validation helper */}
             <input
               type="text"
@@ -239,11 +266,12 @@ export default function NewJobPage() {
               className={inputClass + ' bg-white'}
             >
               <option value="">지역을 선택해주세요</option>
-              {LOCATION_OPTIONS.map(l => (
-                <option key={l} value={l}>
-                  {l}
-                </option>
-              ))}
+              {/* 기존 명칭이 LOCATIONS 또는 NEIGHBORHOOD_OPTIONS 등 정의하신 배열 상수명에 맞게 매핑하세요 */}
+            {LOCATION_OPTIONS.map(l => (
+              <option key={l.value} value={l.value}>
+                {l.label}
+              </option>
+            ))}
             </select>
           </Field>
 

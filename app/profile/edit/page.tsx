@@ -12,14 +12,28 @@ const VISA_OPTIONS = ['워킹홀리데이', '학생비자', '취업비자', '영
  * 구직자가 다중 선택할 수 있는 기본 스킬 옵션.
  * 사용자가 인풋을 통해 직접 새 스킬을 추가할 수 있다.
  */
+
+// 변경: 고유 식별 번호로 매핑된 객체 구조로 대체
 const NEIGHBORHOOD_OPTIONS = [
-  '다운타운',
-  '버나비',
-  '서리',
-  '코퀴틀람',
-  '리치몬드',
-  '노스밴쿠버',
-  '기타',
+  { value: '5', label: '밴쿠버' },
+  { value: '1', label: '버나비' },
+  { value: '2', label: '코퀴틀람' },
+  { value: '4', label: '써리' },
+  { value: '11', label: '랭리' },
+  { value: '14', label: '포트코퀴틀람' },
+  { value: '6', label: '노스밴쿠버' },
+  { value: '7', label: '웨스트밴쿠버' },
+  { value: '3', label: '포트무디' },
+  { value: '9', label: '리치몬드' },
+  { value: '12', label: '델타' },
+  { value: '15', label: '뉴웨스터민스터' },
+  { value: '8', label: '메이플릿지' },
+  { value: '10', label: '화이트락' },
+  { value: '16', label: '핏메도우' },
+  { value: '17', label: '재스퍼' },
+  { value: '19', label: '아보츠포드' },
+  { value: '20', label: '킬로나' },
+  { value: '13', label: '기타' },
 ] as const
 
 const SKILL_OPTIONS = [
@@ -457,7 +471,9 @@ export default function EditProfilePage() {
                 >
                   <option value="">선택해주세요</option>
                   {NEIGHBORHOOD_OPTIONS.map(n => (
-                    <option key={n} value={n}>{n}</option>
+                    <option key={n.value} value={n.value}>
+                      {n.label}
+                    </option>
                   ))}
                 </select>
               </div>
