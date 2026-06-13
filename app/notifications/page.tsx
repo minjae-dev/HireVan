@@ -4,17 +4,13 @@
  * app/notifications/page.tsx
  *
  * 알림 센터 (전체 알림 리스트).
- *
- * - useNotifications() 로 전체 알림 + unread 카운트
- * - 각 항목을 클릭하면 chat_room_id 로 이동 + mark as read
- * - 모두 읽음 버튼
- * - 빈 상태 UI
  */
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect } from 'react'
 import { useAuth } from '@/lib/auth-context'
+import { useLanguage } from '@/context/LanguageContext'
 import {
   useNotifications,
   markAllRead,
@@ -34,6 +30,7 @@ function timeAgo(iso: string): string {
 
 export default function NotificationsPage() {
   const { user, loading } = useAuth()
+  const { t } = useLanguage()
   const router = useRouter()
   const { notifications, refresh, unreadCount } = useNotifications()
 
@@ -64,7 +61,7 @@ export default function NotificationsPage() {
 
   if (loading) {
     return (
-      <div className="py-20 text-center text-sm text-gray-400">불러오는 중...</div>
+      <div className="py-20 text-center text-sm text-gray-400">{t('notifications.loading')}</div>
     )
   }
   if (!user) return null
@@ -73,11 +70,11 @@ export default function NotificationsPage() {
     <div className="space-y-4 pt-2">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-lg font-bold text-gray-900">알림</h1>
+          <h1 className="text-lg font-bold text-gray-900">{t('notifications.title')}</h1>
           <p className="text-xs text-gray-500 mt-0.5">
             {unreadCount > 0
-              ? '읽지 않은 알림 ' + unreadCount + '개'
-              : '모든 알림을 확인했어요'}
+              ? t('notifications.unread_count', { count: unreadCount })
+              : t('notifications.all_read')}
           </p>
         </div>
         {unreadCount > 0 && (
@@ -86,14 +83,14 @@ export default function NotificationsPage() {
             onClick={handleMarkAll}
             className="text-sm text-gray-500 hover:text-gray-900 underline-offset-2 hover:underline"
           >
-            모두 읽음
+            {t('notifications.mark_all_read')}
           </button>
         )}
       </div>
 
       {notifications.length === 0 ? (
         <div className="py-24 text-center text-sm text-gray-400 bg-white rounded-2xl ring-1 ring-gray-100">
-          도착한 알림이 없어요
+          {t('notifications.no_notifications')}
         </div>
       ) : (
         <ul className="bg-white rounded-2xl ring-1 ring-gray-100 divide-y divide-gray-100">
@@ -150,7 +147,7 @@ export default function NotificationsPage() {
 
       <div className="text-center text-xs text-gray-400 pt-2">
         <Link href="/chat" className="hover:text-gray-600">
-          채팅 목록으로 →
+          {t('notifications.chat_link')}
         </Link>
       </div>
     </div>

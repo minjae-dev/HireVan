@@ -2,18 +2,12 @@
 
 /**
  * components/NavbarNotificationBell.tsx
- *
- * Navbar 안에 들어가는 알림 벨 아이콘.
- *
- * - useUnreadCount() 로 카운트 구독 → 뱃지 표시
- * - 클릭 시 드롭다운 패널 오픈 (최근 알림 5개 + 모두 보기 링크)
- * - 알림 클릭 → 채팅방 이동 + 읽음 처리
- * - 바깥 클릭 시 자동 닫힘
  */
 
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useEffect, useRef, useState } from 'react'
+import { useLanguage } from '@/context/LanguageContext'
 import {
   useNotifications,
   useUnreadCount,
@@ -34,12 +28,12 @@ function timeAgo(iso: string): string {
 
 export default function NavbarNotificationBell() {
   const router = useRouter()
+  const { t } = useLanguage()
   const [open, setOpen] = useState(false)
   const wrapRef = useRef<HTMLDivElement | null>(null)
   const unread = useUnreadCount()
   const { notifications, refresh } = useNotifications()
 
-  // 바깥 클릭 시 닫기
   useEffect(() => {
     if (!open) return
     const onClick = (e: MouseEvent) => {
@@ -81,7 +75,7 @@ export default function NavbarNotificationBell() {
           void refresh()
         }}
         className="relative w-9 h-9 rounded-full flex items-center justify-center text-gray-600 hover:bg-gray-100"
-        aria-label="알림 열기"
+        aria-label={t('notifications.open_bell')}
       >
         <span aria-hidden>🔔</span>
         {unread > 0 && (
@@ -97,25 +91,25 @@ export default function NavbarNotificationBell() {
       {open && (
         <div
           role="dialog"
-          aria-label="알림"
+          aria-label={t('notifications.bell_label')}
           className="absolute right-0 mt-2 w-80 max-w-[calc(100vw-1rem)] bg-white rounded-2xl shadow-xl ring-1 ring-gray-200 z-50 overflow-hidden"
         >
           <div className="flex items-center justify-between px-4 py-3 border-b border-gray-100">
-            <h3 className="text-sm font-semibold text-gray-900">알림</h3>
+            <h3 className="text-sm font-semibold text-gray-900">{t('notifications.bell_label')}</h3>
             {unread > 0 && (
               <button
                 type="button"
                 onClick={handleMarkAll}
                 className="text-xs text-gray-500 hover:text-gray-700"
               >
-                모두 읽음
+                {t('notifications.mark_all_read')}
               </button>
             )}
           </div>
 
           {recent.length === 0 ? (
             <div className="px-4 py-10 text-center text-sm text-gray-400">
-              도착한 알림이 없어요
+              {t('notifications.no_notifications')}
             </div>
           ) : (
             <ul className="max-h-96 overflow-y-auto divide-y divide-gray-100">
@@ -177,7 +171,7 @@ export default function NavbarNotificationBell() {
             onClick={() => setOpen(false)}
             className="block text-center text-xs text-gray-500 hover:text-gray-700 px-4 py-3 border-t border-gray-100"
           >
-            모든 알림 보기 →
+            {t('nav.chat_list')} →
           </Link>
         </div>
       )}

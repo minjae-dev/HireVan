@@ -5,12 +5,14 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
+import { useLanguage } from '@/context/LanguageContext'
 import type { Database } from '@/lib/database.types'
 
 type JobPost = Database['public']['Tables']['job_posts']['Row']
 
 export default function MyJobsPage() {
   const { user, profile, loading } = useAuth()
+  const { t } = useLanguage()
   const router = useRouter()
   const [jobs, setJobs] = useState<JobPost[]>([])
   const [fetching, setFetching] = useState(true)
@@ -46,26 +48,26 @@ export default function MyJobsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold text-gray-900">내 구인글</h1>
+        <h1 className="text-xl font-bold text-gray-900">{t('jobs.my_jobs_title')}</h1>
         <Link
           href="/jobs/new"
           className="text-sm text-white font-semibold px-4 py-2 rounded-full"
           style={{ backgroundColor: 'var(--brand)' }}
         >
-          + 새 구인글
+          {t('jobs.new_job_btn')}
         </Link>
       </div>
 
       {jobs.length === 0 ? (
         <div className="text-center py-20 text-gray-400">
           <p className="text-4xl mb-3">📋</p>
-          <p className="text-sm mb-4">아직 등록한 구인글이 없습니다</p>
+          <p className="text-sm mb-4">{t('jobs.my_jobs_empty')}</p>
           <Link
             href="/jobs/new"
             className="inline-block text-white font-semibold text-sm px-6 py-2.5 rounded-full"
             style={{ backgroundColor: 'var(--brand)' }}
           >
-            첫 구인글 올리기
+            {t('jobs.my_first_job')}
           </Link>
         </div>
       ) : (
@@ -83,7 +85,7 @@ export default function MyJobsPage() {
                       job.status === 'open' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
                     }`}
                   >
-                    {job.status === 'open' ? '모집중' : '마감'}
+                    {t(job.status === 'open' ? 'common.open' : 'common.closed')}
                   </span>
                 </div>
               </div>

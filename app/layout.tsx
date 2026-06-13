@@ -2,6 +2,7 @@ import Navbar from '@/components/Navbar'
 import NotificationProvider from '@/components/NotificationProvider'
 import NotificationToaster from '@/components/NotificationToaster'
 import { AuthProvider } from '@/lib/auth-context'
+import { LanguageProvider } from '@/context/LanguageContext'
 import type { Metadata } from 'next'
 import './globals.css'
 
@@ -60,13 +61,15 @@ export default function RootLayout({
       suppressHydrationWarning
     >
         <AuthProvider>
-          <NotificationProvider>
-            <Navbar />
-            <main className="max-w-2xl mx-auto px-4 pb-16 pt-4">
-              {children}
-            </main>
-            <NotificationToaster />
-          </NotificationProvider>
+          <LanguageProvider>
+            <NotificationProvider>
+              <Navbar />
+              <main className="max-w-2xl mx-auto px-4 pb-16 pt-4">
+                {children}
+              </main>
+              <NotificationToaster />
+            </NotificationProvider>
+          </LanguageProvider>
         </AuthProvider>
       </body>
     </html>

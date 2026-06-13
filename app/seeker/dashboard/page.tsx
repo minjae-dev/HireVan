@@ -1,6 +1,7 @@
 'use client'
 
 import { useAuth } from '@/lib/auth-context'
+import { useLanguage } from '@/context/LanguageContext'
 import type { JobMatchResult, SeekerPreferences } from '@/lib/database.types'
 import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
@@ -69,19 +70,16 @@ function matchLocation(jobLocation: string, selectedLocations: string[]): boolea
   if (!jobLoc) return false
   
   return selectedLocations.some(selectedId => {
-    // 1. 선택된 숫자 ID(예: '1')에 해당하는 한글 이름(예: '버나비')을 찾습니다.
     const locationObj = LOCATIONS.find(l => l.value === selectedId)
     const krName = locationObj ? locationObj.label : ''
-    
-    // 2. 한글 이름으로 맵에서 Alias 배열을 꺼내고, 없다면 고유 ID 혹은 한글 이름 자체를 배열로 둡니다.
     const aliases = LOCATION_ALIASES[krName] ?? [selectedId.toLowerCase()]
-    
-    // 3. 공고 텍스트에 포함되어 있는지 비교 검증
     return aliases.some(alias => jobLoc.includes(alias.toLowerCase()))
   })
 }
+
 export default function SeekerDashboardPage() {
   const { user, profile, loading: authLoading } = useAuth()
+  const { t } = useLanguage()
   const [matches, setMatches] = useState<JobMatchResult[]>([])
   const [matchesLoading, setMatchesLoading] = useState(true)
   const [matchError, setMatchError] = useState<string | null>(null)
@@ -114,7 +112,7 @@ export default function SeekerDashboardPage() {
     try {
       const accessToken = await getValidAccessToken()
       if (!accessToken) {
-        throw new Error('로그인 세션이 만료되었습니다. 다시 로그인해주세요.')
+        throw new Error(t('seeker.access_denied_desc'))
       }
       const res = await fetch('/api/seeker/matches', {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -138,7 +136,7 @@ export default function SeekerDashboardPage() {
     } finally {
       setMatchesLoading(false)
     }
-  }, [user, getValidAccessToken])
+  }, [user, getValidAccessToken, t])
 
   useEffect(() => {
     if (!authLoading && user) fetchMatches()
@@ -160,13 +158,12 @@ export default function SeekerDashboardPage() {
       }
       const { error } = await supabase.from('seeker_preferences').upsert(newPrefs, { onConflict: 'seeker_id' })
       if (error) throw error
-      // 저장 즉시 ref/state 업데이트 → useMemo가 최신값으로 필터링
       latestPreferencesRef.current = newPrefs as unknown as SeekerPreferences;
       setPreferences(newPrefs as unknown as SeekerPreferences);
       setShowPrefForm(false)
       await fetchMatches()
     } catch (err) {
-      alert('저장 중 오류가 발생했습니다: ' + (err instanceof Error ? err.message : 'Unknown'))
+      alert(t('common.saving') + ': ' + (err instanceof Error ? err.message : 'Unknown'))
     } finally {
       setFormSaving(false)
     }
@@ -183,8 +180,6 @@ export default function SeekerDashboardPage() {
     if (!matches || matches.length === 0) return []
 
     const prefs = latestPreferencesRef.current ?? preferences
-
-    // preferences row 자체가 없으면 전체 표시
     if (!prefs) return matches
 
     const desiredLocations = prefs.desired_locations ?? []
@@ -193,7 +188,6 @@ export default function SeekerDashboardPage() {
     const hasLocationFilter = desiredLocations.length > 0
     const hasSalaryFilter = desiredSalaryMin != null || desiredSalaryMax != null
 
-    // 조건이 하나도 없으면 전체 표시
     if (!hasLocationFilter && !hasSalaryFilter) return matches
 
     if (process.env.NODE_ENV === 'development') {
@@ -229,9 +223,9 @@ export default function SeekerDashboardPage() {
   if (!user || profile?.role !== 'seeker') {
     return (
       <div className="p-8 text-center">
-        <h1 className="text-xl font-bold text-gray-900">접근할 수 없습니다</h1>
-        <p className="mt-2 text-sm text-gray-500">구직자 계정으로 로그인해주세요.</p>
-        <Link href="/login" className="mt-4 inline-block rounded-full bg-orange-500 px-6 py-2 text-sm font-bold text-white">로그인하기</Link>
+        <h1 className="text-xl font-bold text-gray-900">{t('seeker.access_denied')}</h1>
+        <p className="mt-2 text-sm text-gray-500">{t('seeker.access_denied_desc')}</p>
+        <Link href="/login" className="mt-4 inline-block rounded-full bg-orange-500 px-6 py-2 text-sm font-bold text-white">{t('seeker.login')}</Link>
       </div>
     )
   }
@@ -239,29 +233,29 @@ export default function SeekerDashboardPage() {
   return (
     <div className="mx-auto max-w-4xl px-4 py-8">
       <div className="mb-8">
-        <h1 className="text-2xl font-extrabold text-gray-900">내 대시보드</h1>
-        <p className="mt-1 text-sm text-gray-500">{profile.name}님, 맞춤 공고를 확인하고 지원해보세요.</p>
+        <h1 className="text-2xl font-extrabold text-gray-900">{t('seeker.dashboard_title')}</h1>
+        <p className="mt-1 text-sm text-gray-500">{t('seeker.dashboard_subtitle', { name: profile.name })}</p>
       </div>
 
       <section className="mb-8 rounded-3xl border border-gray-200 bg-white p-6">
         <div className="flex items-center justify-between">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">📋 내 희망 조건</h2>
+            <h2 className="text-lg font-bold text-gray-900">{t('seeker.preferences_title')}</h2>
             <p className="mt-1 text-sm text-gray-500">
-              {preferences ? '희망 조건이 설정되어 있어요.' : '희망 조건을 설정하면 맞춤 공고를 추천해드려요.'}
+              {preferences ? t('seeker.preferences_set') : t('seeker.preferences_unset')}
             </p>
           </div>
           <button type="button" onClick={() => setShowPrefForm(!showPrefForm)}
             className="flex-shrink-0 rounded-full border border-orange-300 bg-white px-4 py-2 text-xs font-bold text-orange-600 transition-all active:scale-95"
           >
-            {showPrefForm ? '취소' : preferences ? '✏️ 조건 수정' : '✨ 조건 설정'}
+            {showPrefForm ? t('seeker.preferences_cancel') : preferences ? t('seeker.preferences_edit') : t('seeker.preferences_set_btn')}
           </button>
         </div>
 
         {showPrefForm && (
           <div className="mt-6 space-y-5">
             <div>
-              <p className="mb-2 text-xs font-semibold text-gray-600">희망 업종 (중복 선택 가능)</p>
+              <p className="mb-2 text-xs font-semibold text-gray-600">{t('seeker.pref_category')}</p>
               <div className="flex flex-wrap gap-2">
                 {CATEGORIES.map(cat => (
                 <button 
@@ -280,7 +274,7 @@ export default function SeekerDashboardPage() {
               </div>
             </div>
             <div>
-              <p className="mb-2 text-xs font-semibold text-gray-600">희망 지역 (중복 선택 가능)</p>
+              <p className="mb-2 text-xs font-semibold text-gray-600">{t('seeker.pref_location')}</p>
               <div className="flex flex-wrap gap-2">
                 {LOCATIONS.map(loc => (
                 <button 
@@ -300,14 +294,14 @@ export default function SeekerDashboardPage() {
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs font-semibold text-gray-600">최소 시급 (CAD)</label>
-                <input type="number" value={formSalaryMin} onChange={e => setFormSalaryMin(e.target.value)} placeholder="예: 17"
+                <label className="block text-xs font-semibold text-gray-600">{t('seeker.pref_salary_min')}</label>
+                <input type="number" value={formSalaryMin} onChange={e => setFormSalaryMin(e.target.value)} placeholder={t('common.salary').includes('예') ? '17' : '17'}
                   className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-orange-400"
                 />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-gray-600">최대 시급 (CAD)</label>
-                <input type="number" value={formSalaryMax} onChange={e => setFormSalaryMax(e.target.value)} placeholder="예: 25"
+                <label className="block text-xs font-semibold text-gray-600">{t('seeker.pref_salary_max')}</label>
+                <input type="number" value={formSalaryMax} onChange={e => setFormSalaryMax(e.target.value)} placeholder="25"
                   className="mt-1 w-full rounded-xl border border-gray-200 px-4 py-2.5 text-sm outline-none focus:border-orange-400"
                 />
               </div>
@@ -315,14 +309,14 @@ export default function SeekerDashboardPage() {
             <button type="button" onClick={savePreferences} disabled={formSaving}
               className="w-full rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-6 py-3 text-sm font-extrabold text-white shadow-md transition-all active:scale-95 disabled:opacity-60"
             >
-              {formSaving ? '저장 중...' : '💾 조건 저장하고 맞춤 공고 보기'}
+              {formSaving ? t('seeker.pref_saving') : t('seeker.pref_save')}
             </button>
           </div>
         )}
       </section>
 
       <section className="mb-8">
-        <h2 className="mb-4 text-lg font-bold text-gray-900">📌 나를 위한 맞춤 공고</h2>
+        <h2 className="mb-4 text-lg font-bold text-gray-900">{t('seeker.matched_jobs_title')}</h2>
 
         {matchesLoading ? (
           <div className="space-y-3">
@@ -331,24 +325,24 @@ export default function SeekerDashboardPage() {
         ) : matchError ? (
           <div className="rounded-2xl border border-red-200 bg-red-50 p-6 text-center">
             <p className="text-sm text-red-600">{matchError}</p>
-            <button type="button" onClick={fetchMatches} className="mt-3 rounded-full bg-red-500 px-4 py-2 text-xs font-bold text-white">다시 시도</button>
+            <button type="button" onClick={fetchMatches} className="mt-3 rounded-full bg-red-500 px-4 py-2 text-xs font-bold text-white">{t('seeker.retry')}</button>
           </div>
         ) : matches.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center">
             <p className="text-3xl">🔍</p>
-            <p className="mt-2 text-sm font-semibold text-gray-700">아직 맞춤 공고가 없어요</p>
-            <p className="mt-1 text-xs text-gray-500">위에서 희망 조건을 설정하면 조건에 맞는 공고를 추천해드려요.</p>
+            <p className="mt-2 text-sm font-semibold text-gray-700">{t('seeker.no_matches')}</p>
+            <p className="mt-1 text-xs text-gray-500">{t('seeker.no_matches_desc')}</p>
           </div>
         ) : filteredMatches.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-8 text-center">
             <p className="text-3xl">📭</p>
-            <p className="mt-2 text-sm font-semibold text-gray-700">희망 조건에 맞는 공고가 없어요</p>
-            <p className="mt-1 text-xs text-gray-500">지역이나 시급 조건을 조정하면 더 많은 공고를 볼 수 있어요.</p>
-            <p className="mt-3 text-[10px] text-gray-400">전체 맞춤 공고 {matches.length}개 중 조건에 맞는 0개</p>
+            <p className="mt-2 text-sm font-semibold text-gray-700">{t('seeker.no_filtered_matches')}</p>
+            <p className="mt-1 text-xs text-gray-500">{t('seeker.no_filtered_desc')}</p>
+            <p className="mt-3 text-[10px] text-gray-400">{t('seeker.no_filtered_info', { total: matches.length })}</p>
           </div>
         ) : (
           <>
-            <p className="mb-2 text-xs text-gray-400">총 {filteredMatches.length}개</p>
+            <p className="mb-2 text-xs text-gray-400">{t('jobs.total_count', { count: filteredMatches.length })}</p>
             <div className="space-y-3">
             {filteredMatches.map(match => (
               <Link key={match.job_id} href={`/jobs/${match.job_id}`}
@@ -358,7 +352,7 @@ export default function SeekerDashboardPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex items-center gap-2">
                       <h3 className="truncate text-base font-bold text-gray-900">{match.title}</h3>
-                      <span className="flex-shrink-0 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-600">★{match.match_score}%</span>
+                      <span className="flex-shrink-0 rounded-full bg-orange-100 px-2 py-0.5 text-[10px] font-bold text-orange-600">{t('seeker.match_score', { score: match.match_score })}</span>
                     </div>
                     <p className="mt-1 text-sm text-gray-500">{match.employer_name} · {match.location}{match.salary ? ' · ' + match.salary : ''}</p>
                     {match.matched_reasons.length > 0 && (
@@ -369,7 +363,7 @@ export default function SeekerDashboardPage() {
                       </div>
                     )}
                   </div>
-                  <span className="flex-shrink-0 rounded-full bg-orange-500 px-3 py-1.5 text-xs font-bold text-white">지원하기 →</span>
+                  <span className="flex-shrink-0 rounded-full bg-orange-500 px-3 py-1.5 text-xs font-bold text-white">{t('common.apply')} →</span>
                 </div>
               </Link>
             ))}

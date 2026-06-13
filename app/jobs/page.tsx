@@ -6,6 +6,7 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
+import { useLanguage } from '@/context/LanguageContext'
 import type { Database } from '@/lib/database.types'
 
 type JobPost = Database['public']['Tables']['job_posts']['Row'] & {
@@ -14,13 +15,10 @@ type JobPost = Database['public']['Tables']['job_posts']['Row'] & {
 
 const LOCATIONS = ['전체', '다운타운', '버나비', '서리', '코퀴틀람', '리치몬드', '노스밴쿠버', '기타']
 const JOB_TYPES = ['전체', '카페', '식당', '네일숍', '편의점', '소매점', '청소용역', '배송', '기타']
-const SORT_OPTIONS = [
-  { value: 'latest', label: '최신순' },
-  { value: 'title', label: '제목순' },
-]
 
 export default function JobsPage() {
   const { profile } = useAuth()
+  const { t } = useLanguage()
   const [jobs, setJobs] = useState<JobPost[]>([])
   const [loading, setLoading] = useState(true)
   const [location, setLocation] = useState('전체')
@@ -57,26 +55,17 @@ export default function JobsPage() {
     fetchApplied()
   }, [profile])
 
-  // 필터링 및 정렬
   const filteredJobs = useMemo(() => {
     let result = [...jobs]
-
-    // 위치 필터
     if (location !== '전체') {
       const locKeyword = location.toLowerCase()
       result = result.filter(job => {
         const jobLocation = (job.location || '').toLowerCase()
         const description = (job.description || '').toLowerCase()
         const title = (job.title || '').toLowerCase()
-        return (
-          jobLocation.includes(locKeyword) ||
-          description.includes(locKeyword) ||
-          title.includes(locKeyword)
-        )
+        return jobLocation.includes(locKeyword) || description.includes(locKeyword) || title.includes(locKeyword)
       })
     }
-
-    // 업종 필터
     if (jobType !== '전체') {
       result = result.filter(job => {
         const description = (job.description || '').toLowerCase()
@@ -85,12 +74,9 @@ export default function JobsPage() {
         return description.includes(typeKeyword) || title.includes(typeKeyword)
       })
     }
-
-    // 정렬
     if (sortBy === 'title') {
       result.sort((a, b) => (a.title || '').localeCompare(b.title || '', 'ko'))
     }
-
     return result
   }, [jobs, location, jobType, sortBy])
 
@@ -98,17 +84,15 @@ export default function JobsPage() {
 
   return (
     <div>
-      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">구인글</h1>
-          <p className="text-sm text-gray-500 mt-1">새로운 일자리를 찾아보세요</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('jobs.title')}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t('jobs.subtitle')}</p>
         </div>
       </div>
 
-      {/* 위치 필터 - 항상 표시 */}
       <div className="mb-4">
-        <p className="text-xs font-semibold text-gray-500 mb-2">위치</p>
+        <p className="text-xs font-semibold text-gray-500 mb-2">{t('jobs.filter_location')}</p>
         <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
           {LOCATIONS.map(loc => (
             <button
@@ -127,31 +111,27 @@ export default function JobsPage() {
         </div>
       </div>
 
-      {/* 필터/정렬 토글 & 미니 필터바 */}
       <div className="mb-4 flex gap-2 items-center">
         <button
           onClick={() => setShowFilters(!showFilters)}
           className="flex-shrink-0 px-3.5 py-2 rounded-lg border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition-all"
         >
-          ⚙️ 필터 {activeFilterCount > 0 && <span className="ml-1 text-xs bg-orange-500 text-white rounded-full px-1.5">({activeFilterCount})</span>}
+          ⚙️ {t('jobs.filter_btn')} {activeFilterCount > 0 && <span className="ml-1 text-xs bg-orange-500 text-white rounded-full px-1.5">({activeFilterCount})</span>}
         </button>
 
-        {/* 정렬 선택 */}
         <select
           value={sortBy}
           onChange={(e) => setSortBy(e.target.value as 'latest' | 'title')}
           className="flex-1 px-3 py-2 rounded-lg border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-300"
         >
-          {SORT_OPTIONS.map(opt => (
-            <option key={opt.value} value={opt.value}>{opt.label}</option>
-          ))}
+          <option value="latest">{t('jobs.sort_latest')}</option>
+          <option value="title">{t('jobs.sort_title')}</option>
         </select>
       </div>
 
-      {/* 확장 필터 (업종) */}
       {showFilters && (
         <div className="mb-4 p-4 bg-gray-50 rounded-2xl border border-gray-100">
-          <p className="text-xs font-semibold text-gray-500 mb-2">업종</p>
+          <p className="text-xs font-semibold text-gray-500 mb-2">{t('jobs.filter_category')}</p>
           <div className="flex flex-wrap gap-2">
             {JOB_TYPES.map(type => (
               <button
@@ -171,7 +151,6 @@ export default function JobsPage() {
         </div>
       )}
 
-      {/* 결과 표시 */}
       {loading ? (
         <div className="flex justify-center py-20">
           <div className="w-8 h-8 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
@@ -179,7 +158,7 @@ export default function JobsPage() {
       ) : filteredJobs.length === 0 ? (
         <div className="text-center py-20 text-gray-400">
           <p className="text-4xl mb-3">📋</p>
-          <p className="text-sm">조건에 맞는 구인글이 없습니다</p>
+          <p className="text-sm">{t('jobs.no_jobs')}</p>
           {(location !== '전체' || jobType !== '전체') && (
             <button
               onClick={() => {
@@ -188,13 +167,13 @@ export default function JobsPage() {
               }}
               className="mt-3 text-sm text-orange-500 hover:text-orange-600 font-medium"
             >
-              필터 초기화
+              {t('jobs.reset_filter')}
             </button>
           )}
         </div>
       ) : (
         <>
-          <p className="text-xs text-gray-400 mb-3">총 {filteredJobs.length}개</p>
+          <p className="text-xs text-gray-400 mb-3">{t('jobs.total_count', { count: filteredJobs.length })}</p>
           <div className="flex flex-col gap-3">
             {filteredJobs.map(job => (
               <JobCard
@@ -202,6 +181,7 @@ export default function JobsPage() {
                 job={job}
                 applied={appliedIds.has(job.id)}
                 isSeeker={profile?.role === 'seeker'}
+                t={t}
               />
             ))}
           </div>
@@ -215,10 +195,12 @@ function JobCard({
   job,
   applied,
   isSeeker,
+  t,
 }: {
   job: JobPost
   applied: boolean
   isSeeker: boolean
+  t: (key: string, params?: Record<string, string | number>) => string
 }) {
   return (
     <Link href={`/jobs/${job.id}`}>
@@ -226,11 +208,11 @@ function JobCard({
         <div className="flex items-start justify-between gap-3 mb-2">
           <div className="flex-1 min-w-0">
             <h2 className="font-semibold text-gray-900 text-base truncate">{job.title}</h2>
-            <p className="text-sm text-gray-500">{job.profiles?.name ?? '업체'}</p>
+            <p className="text-sm text-gray-500">{job.profiles?.name ?? t('jobs.employer_name_fallback')}</p>
           </div>
           {isSeeker && applied && (
             <span className="flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 text-green-700 whitespace-nowrap">
-              지원완료
+              {t('common.applied')}
             </span>
           )}
         </div>

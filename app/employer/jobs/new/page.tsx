@@ -2,53 +2,21 @@
 
 import { useAuth } from '@/lib/auth-context'
 import { supabase } from '@/lib/supabase'
+import { useLanguage } from '@/context/LanguageContext'
+import { getLocations, getCategories } from '@/lib/options'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
-const LOCATION_OPTIONS =  [
-  { value: '5', label: '밴쿠버' },
-  { value: '1', label: '버나비' },
-  { value: '2', label: '코퀴틀람' },
-  { value: '4', label: '써리' },
-  { value: '11', label: '랭리' },
-  { value: '14', label: '포트코퀴틀람' },
-  { value: '6', label: '노스밴쿠버' },
-  { value: '7', label: '웨스트밴쿠버' },
-  { value: '3', label: '포트무디' },
-  { value: '9', label: '리치몬드' },
-  { value: '12', label: '델타' },
-  { value: '15', label: '뉴웨스터민스터' },
-  { value: '8', label: '메이플릿지' },
-  { value: '10', label: '화이트락' },
-  { value: '16', label: '핏메도우' },
-  { value: '17', label: '재스퍼' },
-  { value: '19', label: '아보츠포드' },
-  { value: '20', label: '킬로나' },
-  { value: '13', label: '기타' },
-] as const
-const JOB_TYPE_OPTIONS = [
-  { value: '식당', label: '식당' },
-  { value: '카페', label: '카페' },
-  { value: 'office-accounting', label: '사무/회계' },
-  { value: 'sales-consultation', label: '영업/상담' },
-  { value: 'retail-dealership', label: '유통/판매' },
-  { value: 'shipping-logistics', label: '배송/물류' },
-  { value: 'production-tech', label: '생산/기술' },
-  { value: 'construction', label: '건설/토목' },
-  { value: 'care-cleaning', label: '돌봄/청소' },
-  { value: 'it-design', label: 'IT/디자인' },
-  { value: 'beauty-ceremony', label: '미용/예식' },
-  { value: 'healthcare', label: '간호/의료' },
-  { value: 'teaching-lecturer', label: '교육/강사' },
-  { value: 'etc', label: '기타' },
-] as const
 const MAX_QUESTIONS_FREE = 3
 const MAX_QUESTIONS_PRO = 5
 
 export default function EmployerNewJobPage() {
   const router = useRouter()
   const { user, profile, loading } = useAuth()
+  const { t } = useLanguage()
+  const LOCATION_OPTIONS = getLocations(t)
+  const JOB_TYPE_OPTIONS = getCategories(t)
 
   const [formData, setFormData] = useState({
     title: '',
@@ -73,9 +41,9 @@ export default function EmployerNewJobPage() {
     return (
       <div className="text-center py-20 text-gray-500">
         <p className="text-4xl mb-3">🚫</p>
-        <p className="text-sm mb-4">업체 계정만 구인글을 등록할 수 있습니다.</p>
+        <p className="text-sm mb-4">{t('jobs.employer_only')}</p>
         <Link href="/login" className="inline-block text-white font-semibold text-sm px-6 py-2.5 rounded-full" style={{ backgroundColor: 'var(--brand)' }}>
-          로그인
+          {t('auth.login_button')}
         </Link>
       </div>
     )
@@ -88,32 +56,27 @@ export default function EmployerNewJobPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    // 유저가  프로플랜 인지 확인하는 작업
     if(requireResume && !isPro || questions.length > MAX_QUESTIONS_FREE && !isPro) {
-      setError(`PRO 플랜으로 업그레이드해야만 이용가능합니다.`)
+      setError(t('employer.pro_required'))
       return
     }
-    // 유효성 검사
     if (!formData.title.trim()) {
-      setError('공고 제목을 입력해주세요.')
+      setError(t('jobs.new_job_title_label') + t('common.required'))
       return
     }
     if (!formData.location) {
-      setError('근무 위치를 선택해주세요.')
+      setError(t('jobs.new_job_location') + t('common.required'))
       return
     }
     if (!formData.jobType) {
-      setError('업종을 선택해주세요.')
+      setError(t('jobs.new_job_category') + t('common.required'))
       return
     }
 
     if (!user) {
-      setError('사용자 정보가 없습니다.')
+      setError(t('common.no_data'))
       return
     }
-   
-
-
 
     const customQuestions = questions
       .map(question => question.trim())
@@ -127,16 +90,12 @@ export default function EmployerNewJobPage() {
     setError('')
 
     try {
-      // DB에 category, deadline, require_resume, custom_questions 컬럼이 없을 수 있으므로
-      // description에 모든 정보를 포함하여 저장
       let descriptionText = `[${formData.jobType}] ${formData.description}`
 
-      // 마감일 정보가 있으면 description에 추가
       if (formData.deadline) {
         descriptionText = `[마감:${formData.deadline}] ${descriptionText}`
       }
 
-      // PRO 기능 (require_resume, custom_questions)은 description에 주석으로 추가
       if (requireResume) {
         descriptionText = `[이력서필수] ${descriptionText}`
       }
@@ -145,8 +104,6 @@ export default function EmployerNewJobPage() {
         descriptionText = `${descriptionText}\n\n[사전질문] ${questionsText}`
       }
 
-      // job_posts 테이블에 실제로 존재하는 컬럼만 사용
-      // (id, employer_id, title, location, salary, work_hours, description, status, created_at)
       const jobPostData = {
         employer_id: user.id,
         title: formData.title,
@@ -157,8 +114,6 @@ export default function EmployerNewJobPage() {
         status: 'open' as const,
       }
 
-      console.log('Submitting job post with data:', jobPostData)
-
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error: insertError } = await (supabase as any)
         .from('job_posts')
@@ -166,26 +121,23 @@ export default function EmployerNewJobPage() {
         .select()
         .single()
 
-      console.log('Insert result:', { data, insertError })
-
       if (insertError) {
         console.error('Supabase error:', insertError)
-        setError(`구인글 등록에 실패했습니다: ${insertError.message}`)
+        setError(`${t('jobs.new_job_error')}: ${insertError.message}`)
         setSubmitting(false)
         return
       }
 
       if (!data) {
-        setError('구인글 등록에 실패했습니다. 데이터가 반환되지 않았습니다.')
+        setError(t('jobs.new_job_error'))
         setSubmitting(false)
         return
       }
 
-      // 성공 후 목록 페이지로 이동
       router.push('/employer/jobs')
     } catch (err) {
       console.error('Unexpected error:', err)
-      setError(`오류가 발생했습니다: ${err instanceof Error ? err.message : '알 수 없는 오류'}`)
+      setError(`${t('jobs.new_job_error')}: ${err instanceof Error ? err.message : ''}`)
       setSubmitting(false)
     }
   }
@@ -218,8 +170,8 @@ export default function EmployerNewJobPage() {
           ←
         </Link>
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">새 구인글 등록</h1>
-          <p className="text-sm text-gray-500 mt-1">구인 정보를 입력하여 직원을 모집하세요</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('jobs.new_job_title')}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t('jobs.new_job_subtitle')}</p>
         </div>
       </div>
 
@@ -227,51 +179,50 @@ export default function EmployerNewJobPage() {
         {/* 공고 제목 */}
         <div className="mb-6">
           <label className="block text-sm font-semibold text-gray-900 mb-2">
-            공고 제목 <span className="text-red-500">*</span>
+            {t('jobs.new_job_title_label')} <span className="text-red-500">*</span>
           </label>
           <input
             type="text"
             name="title"
             value={formData.title}
             onChange={handleChange}
-            placeholder="예: 한식당 주방 보조원 모집"
+            placeholder={t('jobs.new_job_title_placeholder')}
             className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent transition-all"
           />
-          <p className="text-xs text-gray-400 mt-1">구직자 눈에 띄는 제목으로 작성해주세요</p>
+          <p className="text-xs text-gray-400 mt-1">{t('jobs.new_job_title_hint')}</p>
         </div>
 
         {/* 업체명 */}
         <div className="mb-6">
           <label className="block text-sm font-semibold text-gray-900 mb-2">
-            업체명
+            {t('jobs.company_name')}
           </label>
           <input
             type="text"
             name="businessName"
             value={formData.businessName}
             onChange={handleChange}
-            placeholder={profile?.name || '업체명'}
+            placeholder={profile?.name || t('jobs.company_name')}
             disabled
             className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm bg-gray-50 text-gray-500 cursor-not-allowed"
           />
-          <p className="text-xs text-gray-400 mt-1">프로필 정보에서 변경할 수 있습니다</p>
+          <p className="text-xs text-gray-400 mt-1">{t('jobs.company_name_hint')}</p>
         </div>
 
         {/* 위치, 업종 */}
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <label className="block text-sm font-semibold text-gray-900 mb-2">
-              근무 위치 <span className="text-red-500">*</span>
+              {t('jobs.new_job_location')} <span className="text-red-500">*</span>
             </label>
-           <select
+            <select
               name="location"
-              value={formData.location} // 선택 시 formData.location에 '1', '2' 같은 숫자 ID 문자열이 담깁니다.
+              value={formData.location}
               onChange={handleChange}
               className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent transition-all"
             >
-              <option value="">선택해주세요</option>
-              {/* 정의하신 배열 상수명(LOCATIONS 또는 NEIGHBORHOOD_OPTIONS)에 맞게 매핑하세요 */}
-              {LOCATION_OPTIONS.map(loc => (
+              <option value="">{t('jobs.new_job_location_placeholder')}</option>
+              {LOCATION_OPTIONS.map((loc: { value: string; label: string }) => (
                 <option key={loc.value} value={loc.value}>
                   {loc.label}
                 </option>
@@ -281,7 +232,7 @@ export default function EmployerNewJobPage() {
 
           <div>
             <label className="block text-sm font-semibold text-gray-900 mb-2">
-              업종 <span className="text-red-500">*</span>
+              {t('jobs.new_job_category')} <span className="text-red-500">*</span>
             </label>
             <select
               name="jobType"
@@ -289,12 +240,12 @@ export default function EmployerNewJobPage() {
               onChange={handleChange}
               className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent transition-all"
             >
-              <option value="">선택해주세요</option>
-              {JOB_TYPE_OPTIONS.map(type => (
-                  <option key={type.value} value={type.value}>
-                    {type.label}
-                  </option>
-                ))}
+              <option value="">{t('jobs.new_job_location_placeholder')}</option>
+              {JOB_TYPE_OPTIONS.map((type: { value: string; label: string }) => (
+                <option key={type.value} value={type.value}>
+                  {type.label}
+                </option>
+              ))}
             </select>
           </div>
         </div>
@@ -303,28 +254,28 @@ export default function EmployerNewJobPage() {
         <div className="grid grid-cols-2 gap-4 mb-6">
           <div>
             <label className="block text-sm font-semibold text-gray-900 mb-2">
-              시급 / 월급
+              {t('jobs.new_job_salary')}
             </label>
             <input
               type="text"
               name="salary"
               value={formData.salary}
               onChange={handleChange}
-              placeholder="예: $17-18/hr"
+              placeholder={t('jobs.salary_placeholder')}
               className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent transition-all"
             />
           </div>
 
           <div>
             <label className="block text-sm font-semibold text-gray-900 mb-2">
-              근무 시간
+              {t('jobs.new_job_work_hours')}
             </label>
             <input
               type="text"
               name="workHours"
               value={formData.workHours}
               onChange={handleChange}
-              placeholder="예: 주 3-4일, 풀타임"
+              placeholder={t('jobs.hours_placeholder')}
               className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent transition-all"
             />
           </div>
@@ -333,7 +284,7 @@ export default function EmployerNewJobPage() {
         {/* 마감일 */}
         <div className="mb-6">
           <label className="block text-sm font-semibold text-gray-900 mb-2">
-            모집 기한
+            {t('jobs.new_job_deadline')}
           </label>
           <input
             type="date"
@@ -342,35 +293,35 @@ export default function EmployerNewJobPage() {
             onChange={handleChange}
             className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent transition-all"
           />
-          <p className="text-xs text-gray-400 mt-1">설정하지 않으면 무기한 모집입니다</p>
+          <p className="text-xs text-gray-400 mt-1">{t('jobs.new_job_deadline_hint')}</p>
         </div>
 
         {/* 상세 설명 */}
         <div className="mb-6">
           <label className="block text-sm font-semibold text-gray-900 mb-2">
-            상세 내용
+            {t('common.description')}
           </label>
           <textarea
             name="description"
             value={formData.description}
             onChange={handleChange}
             rows={6}
-            placeholder="업무 내용, 필수 조건, 우대사항, 복리후생, 연락처 등을 자세히 작성해주세요"
+            placeholder={t('jobs.description_placeholder')}
             className="w-full px-4 py-3 rounded-xl border border-gray-200 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent transition-all resize-none"
           />
-          <p className="text-xs text-gray-400 mt-1">상세할수록 좋은 지원자를 만날 수 있습니다</p>
+          <p className="text-xs text-gray-400 mt-1">{t('jobs.description_hint')}</p>
         </div>
 
         <div className="mb-6 rounded-2xl border border-orange-100 bg-orange-50/50 p-4">
           <div className="mb-4 flex items-start justify-between gap-3">
             <div>
               <div className="mb-1 flex items-center gap-2">
-                <h2 className="text-sm font-bold text-gray-900">지원자 필터링 조건 설정</h2>
+                <h2 className="text-sm font-bold text-gray-900">{t('jobs.filtering_title')}</h2>
                 <span className="rounded-full bg-orange-500 px-2 py-0.5 text-[11px] font-bold text-white">PRO</span>
               </div>
               <p className="text-xs leading-relaxed text-gray-500">
-                필요한 서류와 사전 질문을 받아 더 잘 맞는 지원자를 빠르게 확인하세요.
-                {isPro && ' (PRO: 최대 5개)'}
+                {t('jobs.filtering_desc')}
+                {isPro && ' (PRO: max 5)'}
               </p>
             </div>
           </div>
@@ -382,8 +333,8 @@ export default function EmployerNewJobPage() {
             aria-pressed={requireResume}
           >
             <div>
-              <p className="text-sm font-semibold text-gray-900">이력서 첨부 필수</p>
-              <p className="mt-0.5 text-xs text-gray-400">지원자가 프로필에 등록한 이력서를 함께 제출합니다.</p>
+              <p className="text-sm font-semibold text-gray-900">{t('jobs.resume_toggle')}</p>
+              <p className="mt-0.5 text-xs text-gray-400">{t('jobs.resume_toggle_desc')}</p>
             </div>
             <span
               className={`relative h-7 w-12 rounded-full transition-colors ${
@@ -401,8 +352,8 @@ export default function EmployerNewJobPage() {
           <div className="rounded-2xl border border-gray-100 bg-white p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-gray-900">지원자에게 사전 질문하기</p>
-                <p className="mt-0.5 text-xs text-gray-400">최대 {maxQuestions}개까지 단답형 질문을 추가할 수 있습니다.</p>
+                <p className="text-sm font-semibold text-gray-900">{t('jobs.pre_questions_title')}</p>
+                <p className="mt-0.5 text-xs text-gray-400">{t('jobs.pre_questions_max', { count: maxQuestions })}</p>
               </div>
               <button
                 type="button"
@@ -410,13 +361,13 @@ export default function EmployerNewJobPage() {
                 disabled={questions.length >= maxQuestions}
                 className="flex-shrink-0 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-bold text-orange-600 disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
               >
-                + 추가
+                {t('jobs.new_job_pre_questions_add')}
               </button>
             </div>
 
             {questions.length === 0 ? (
               <p className="rounded-xl bg-gray-50 px-4 py-3 text-xs text-gray-400">
-                아직 추가된 질문이 없습니다.
+                {t('jobs.pre_questions_empty')}
               </p>
             ) : (
               <div className="space-y-2">
@@ -427,14 +378,14 @@ export default function EmployerNewJobPage() {
                       value={question}
                       onChange={event => handleQuestionChange(index, event.target.value)}
                       maxLength={120}
-                      placeholder={`질문 ${index + 1}. 예: 가능한 근무 시작일은 언제인가요?`}
+                      placeholder={t('jobs.pre_questions_placeholder_q', { num: index + 1 })}
                       className="min-w-0 flex-1 rounded-xl border border-gray-200 px-4 py-3 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-orange-300"
                     />
                     <button
                       type="button"
                       onClick={() => handleRemoveQuestion(index)}
                       className="h-[46px] w-[46px] flex-shrink-0 rounded-xl border border-gray-200 bg-white text-sm font-bold text-gray-400 transition-colors hover:text-red-500"
-                      aria-label={`질문 ${index + 1} 삭제`}
+                      aria-label={`Q${index + 1}`}
                     >
                       ×
                     </button>
@@ -459,7 +410,7 @@ export default function EmployerNewJobPage() {
             onClick={() => router.back()}
             className="flex-1 px-4 py-3.5 rounded-xl border border-gray-200 bg-white text-gray-700 font-semibold text-sm hover:bg-gray-50 transition-all active:scale-95"
           >
-            취소
+            {t('common.cancel')}
           </button>
           <button
             type="submit"
@@ -467,7 +418,7 @@ export default function EmployerNewJobPage() {
             className="flex-1 px-4 py-3.5 rounded-xl text-white font-semibold text-sm transition-all active:scale-95 disabled:opacity-60"
             style={{ backgroundColor: 'var(--brand)' }}
           >
-            {submitting ? '등록 중...' : '구인글 등록하기'}
+            {submitting ? t('jobs.new_job_submitting') : t('jobs.new_job_submit')}
           </button>
         </div>
       </form>

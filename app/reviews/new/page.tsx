@@ -4,10 +4,12 @@ import { useState, useEffect } from 'react'
 import { useSearchParams, useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
+import { useLanguage } from '@/context/LanguageContext'
 import { Suspense } from 'react'
 
 function NewReviewForm() {
   const { user } = useAuth()
+  const { t } = useLanguage()
   const router = useRouter()
   const searchParams = useSearchParams()
   const roomId = searchParams.get('room')
@@ -49,7 +51,7 @@ function NewReviewForm() {
     })
 
     if (error) {
-      setError('후기 작성에 실패했습니다.')
+      setError(t('reviews.error'))
       setLoading(false)
       return
     }
@@ -60,13 +62,13 @@ function NewReviewForm() {
   return (
     <div className="min-h-[80vh] flex flex-col justify-center">
       <div className="bg-white rounded-2xl border border-gray-100 p-8">
-        <h1 className="text-2xl font-bold text-gray-900 mb-2">후기 작성</h1>
-        <p className="text-sm text-gray-500 mb-6">솔직한 후기는 커뮤니티 신뢰를 높입니다</p>
+        <h1 className="text-2xl font-bold text-gray-900 mb-2">{t('reviews.new_title')}</h1>
+        <p className="text-sm text-gray-500 mb-6">{t('reviews.new_subtitle')}</p>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-5">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-3">
-              별점 <span className="text-red-400">*</span>
+              {t('reviews.rating_label')} <span className="text-red-400">*</span>
             </label>
             <div className="flex gap-2">
               {[1, 2, 3, 4, 5].map(star => (
@@ -82,20 +84,20 @@ function NewReviewForm() {
             </div>
             {rating > 0 && (
               <p className="text-sm text-gray-500 mt-2">
-                {['', '별로였어요', '아쉬웠어요', '보통이에요', '좋았어요', '최고였어요'][rating]}
+                {['', t('reviews.rating_1'), t('reviews.rating_2'), t('reviews.rating_3'), t('reviews.rating_4'), t('reviews.rating_5')][rating]}
               </p>
             )}
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              한줄평
+              {t('reviews.comment_label')}
             </label>
             <textarea
               value={comment}
               onChange={e => setComment(e.target.value)}
               rows={4}
-              placeholder="경험을 자유롭게 작성해주세요"
+              placeholder={t('reviews.comment_placeholder')}
               className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent resize-none"
             />
           </div>
@@ -110,7 +112,7 @@ function NewReviewForm() {
             className="w-full text-white font-semibold py-3 rounded-xl transition-all active:scale-95 disabled:opacity-60"
             style={{ backgroundColor: 'var(--brand)' }}
           >
-            {loading ? '제출 중...' : '후기 제출하기'}
+            {loading ? t('reviews.submitting') : t('reviews.submit')}
           </button>
         </form>
       </div>

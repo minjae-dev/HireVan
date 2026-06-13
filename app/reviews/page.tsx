@@ -1,6 +1,7 @@
 'use client'
 
 import { supabase } from '@/lib/supabase'
+import { useLanguage } from '@/context/LanguageContext'
 import { useEffect, useState } from 'react'
 
 type Review = {
@@ -13,6 +14,7 @@ type Review = {
 }
 
 export default function ReviewsPage() {
+  const { t } = useLanguage()
   const [reviews, setReviews] = useState<Review[]>([])
   const [loading, setLoading] = useState(true)
 
@@ -45,7 +47,7 @@ export default function ReviewsPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 mb-4">후기 목록</h1>
+      <h1 className="text-xl font-bold text-gray-900 mb-4">{t('reviews.title')}</h1>
 
       {loading ? (
         <div className="flex justify-center py-20">
@@ -54,7 +56,7 @@ export default function ReviewsPage() {
       ) : reviews.length === 0 ? (
         <div className="text-center py-20 text-gray-400">
           <p className="text-4xl mb-3">⭐</p>
-          <p className="text-sm">아직 후기가 없습니다</p>
+          <p className="text-sm">{t('reviews.no_reviews')}</p>
         </div>
       ) : (
         <div className="flex flex-col gap-3">
@@ -64,10 +66,10 @@ export default function ReviewsPage() {
                 <div>
                   <div className="flex items-center gap-2 mb-1">
                     <span className="font-semibold text-gray-900 text-sm">
-                      {review.reviewer?.name ?? '익명'}
+                      {review.reviewer?.name ?? t('reviews.anonymous')}
                     </span>
                     <span className="text-xs text-gray-400">→</span>
-                    <span className="text-sm text-gray-600">{review.reviewee?.name ?? '익명'}</span>
+                    <span className="text-sm text-gray-600">{review.reviewee?.name ?? t('reviews.anonymous')}</span>
                   </div>
                   <div className="flex gap-0.5">
                     {[1, 2, 3, 4, 5].map(star => (

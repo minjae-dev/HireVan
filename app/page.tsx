@@ -1,6 +1,7 @@
 'use client'
 
 import EventPopup from '@/components/EventPopup'
+import { useLanguage } from '@/context/LanguageContext'
 import { useRouter } from 'next/navigation'
 import { useState } from 'react'
 
@@ -11,59 +12,58 @@ type UserType = 'seeker' | 'employer'
 
 type RoleConfig = {
   id: UserType
-  label: string
+  labelKey: string
   emoji: string
-  shortDesc: string
-  longHeadline: string
-  longDesc: string
-  steps: { num: string; title: string; desc: string }[]
-  cta: string
-  // 색상 토큰 (Tailwind class 일부 + 인라인 style 혼용)
-  accent: string // hex
-  accentSoft: string // hex (연한 배경)
+  shortDescKey: string
+  longHeadlineKey: string
+  longDescKey: string
+  steps: { num: string; titleKey: string; descKey: string }[]
+  ctaKey: string
+  accent: string
+  accentSoft: string
   ringClass: string
-  imagePath: string // public/ 안의 가상 경로
+  imagePath: string
 }
 
-const ROLE_CONFIG: Record<UserType, RoleConfig> = {
-  seeker: {
-    id: 'seeker',
-    label: '구직자로 시작하기',
-    emoji: '🧑‍🍳',
-    shortDesc: '일자리를 찾고 있어요',
-    longHeadline: '맞춤 공고를 1분 만에 받아보세요',
-    longDesc:
-      '간단한 프로필과 가능한 시간만 입력하면, 우리 동네 사장님들이 올린 공고 중 딱 맞는 곳을 추천해 드려요.',
-    steps: [
-      { num: '01', title: '프로필 등록', desc: '이력·자격증·가능 시간 입력' },
-      { num: '02', title: '맞춤 공고 확인', desc: '내 조건에 딱 맞는 일거리 추천' },
-      { num: '03', title: '원클릭 지원', desc: '마음에 드면 바로 대화 시작' },
-    ],
-    cta: '구직자로 시작하기',
-    accent: '#FF6B35',
-    accentSoft: '#FFF0EB',
-    ringClass: 'ring-orange-400',
-    imagePath: '/guide-seeker.gif',
-  },
-  employer: {
-    id: 'employer',
-    label: '채용자로 시작하기',
-    emoji: '🏪',
-    shortDesc: '인력을 구인중이에요',
-    longHeadline: '검증된 구직자와 빠르게 연결돼요',
-    longDesc:
-      '사장님이 원하던 조건(요일·시간·언어 등)을 입력하면, 그 조건에 부합하는 구직자들께 먼저 노출돼요.',
-    steps: [
-      { num: '01', title: '가게 정보 등록', desc: '매장명 · 업종 · 위치 입력' },
-      { num: '02', title: '구인글 작성', desc: '근무 조건과 원하는 인원 설정' },
-      { num: '03', title: '지원자 채팅', desc: '관심 있는 지원자와 즉시 대화' },
-    ],
-    cta: '채용자로 시작하기',
-    accent: '#2563EB',
-    accentSoft: '#EFF6FF',
-    ringClass: 'ring-blue-400',
-    imagePath: '/guide-employer.gif',
-  },
+function getRoleConfigs(t: (key: string) => string): Record<UserType, RoleConfig> {
+  return {
+    seeker: {
+      id: 'seeker',
+      labelKey: t('landing.seeker_card_title'),
+      emoji: '🧑‍🍳',
+      shortDescKey: t('landing.seeker_card_desc'),
+      longHeadlineKey: t('landing.seeker_headline'),
+      longDescKey: t('landing.seeker_long_desc'),
+      steps: [
+        { num: '01', titleKey: t('landing.seeker_step1_title'), descKey: t('landing.seeker_step1_desc') },
+        { num: '02', titleKey: t('landing.seeker_step2_title'), descKey: t('landing.seeker_step2_desc') },
+        { num: '03', titleKey: t('landing.seeker_step3_title'), descKey: t('landing.seeker_step3_desc') },
+      ],
+      ctaKey: t('landing.seeker_cta'),
+      accent: '#FF6B35',
+      accentSoft: '#FFF0EB',
+      ringClass: 'ring-orange-400',
+      imagePath: '/guide-seeker.gif',
+    },
+    employer: {
+      id: 'employer',
+      labelKey: t('landing.employer_card_title'),
+      emoji: '🏪',
+      shortDescKey: t('landing.employer_card_desc'),
+      longHeadlineKey: t('landing.employer_headline'),
+      longDescKey: t('landing.employer_long_desc'),
+      steps: [
+        { num: '01', titleKey: t('landing.employer_step1_title'), descKey: t('landing.employer_step1_desc') },
+        { num: '02', titleKey: t('landing.employer_step2_title'), descKey: t('landing.employer_step2_desc') },
+        { num: '03', titleKey: t('landing.employer_step3_title'), descKey: t('landing.employer_step3_desc') },
+      ],
+      ctaKey: t('landing.employer_cta'),
+      accent: '#2563EB',
+      accentSoft: '#EFF6FF',
+      ringClass: 'ring-blue-400',
+      imagePath: '/guide-employer.gif',
+    },
+  }
 }
 
 /* ─────────────────────────────────────────────
@@ -71,10 +71,11 @@ const ROLE_CONFIG: Record<UserType, RoleConfig> = {
  * ───────────────────────────────────────────── */
 export default function LandingPage() {
   const [userType, setUserType] = useState<UserType | null>(null)
+  const { t } = useLanguage()
   const router = useRouter()
+  const ROLE_CONFIG = getRoleConfigs(t)
 
   const handleSelect = (type: UserType) => {
-    // 같은 카드를 다시 누르면 접기, 다른 카드 누르면 전환
     setUserType(prev => (prev === type ? null : type))
   }
 
@@ -88,24 +89,22 @@ export default function LandingPage() {
       <section className="pt-8 pb-10 sm:pt-12 sm:pb-14 text-center">
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-orange-50 text-orange-600 text-xs font-semibold mb-5 border border-orange-100">
           <span className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
-          밴쿠버 한인 구인구직 1분 매칭
+          {t('landing.hero_badge')}
         </span>
 
         <h1 className="text-3xl sm:text-5xl font-extrabold text-gray-900 leading-tight tracking-tight">
-          우리 동네 일자리,
+          {t('landing.hero_title_1')}
           <br />
-          <span style={{ color: 'var(--brand)' }}>1분 만에</span> 찾기
+          <span style={{ color: 'var(--brand)' }}>{t('landing.hero_title_2')}</span>
         </h1>
 
         <p className="mt-4 text-sm sm:text-base text-gray-500 max-w-md mx-auto leading-relaxed">
-          워홀러 · 학생 · 주부까지, 우리 동네 사장님과 구직자를
-          <br className="hidden sm:block" />
-          가장 빠르게 연결해 드려요.
+          {t('landing.hero_desc')}
         </p>
       </section>
 
       {/* ───── Selection Section ─────────────────── */}
-      <section className="pb-6 sm:pb-8 max-w-4xl mx-auto"> {/* 1. 여기서 전체 정렬 */}
+      <section className="pb-6 sm:pb-8 max-w-4xl mx-auto">
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           {(Object.values(ROLE_CONFIG) as RoleConfig[]).map(role => {
             const isSelected = userType === role.id
@@ -131,7 +130,6 @@ export default function LandingPage() {
                     : undefined
                 }
               >
-                {/* 선택됨 인디케이터 (우측 상단) */}
                 {isSelected && (
                   <span
                     className="absolute top-3 right-3 inline-flex items-center justify-center w-6 h-6 rounded-full text-white text-xs font-bold animate-fade-in"
@@ -152,11 +150,10 @@ export default function LandingPage() {
                 </div>
 
                 <h3 className="text-lg sm:text-xl font-bold text-gray-900 mb-1">
-                  {role.label}
+                  {role.labelKey}
                 </h3>
-                <p className="text-sm text-gray-500">{role.shortDesc}</p>
+                <p className="text-sm text-gray-500">{role.shortDescKey}</p>
 
-                {/* 선택됨 일 때만 보이는 화살표 */}
                 <div
                   className={[
                     'mt-4 inline-flex items-center gap-1 text-sm font-semibold transition-opacity',
@@ -165,7 +162,7 @@ export default function LandingPage() {
                   style={{ color: role.accent }}
                   aria-hidden={!isSelected}
                 >
-                  아래에서 자세히 보기
+                  {t('landing.details_below')}
                   <span className="text-base">↓</span>
                 </div>
               </button>
@@ -173,10 +170,9 @@ export default function LandingPage() {
           })}
         </div>
 
-        {/* 미선택 시 안내 */}
         {userType === null && (
           <p className="text-center text-xs text-gray-400 mt-4 animate-fade-in">
-            위에서 하나를 선택해 주세요
+            {t('landing.select_prompt')}
           </p>
         )}
       </section>
@@ -184,32 +180,28 @@ export default function LandingPage() {
       {/* ───── Dynamic Content Section ──────────── */}
       {userType && (
         <DynamicContent
-          key={userType /* 타입이 바뀔 때마다 마운트 → 애니메이션 재생 */}
+          key={userType}
           config={ROLE_CONFIG[userType]}
           onStart={handleStart}
+          t={t}
         />
       )}
 
       {/* ───── Footer ───────────────────────────── */}
       <footer className="mt-16 pb-6 text-center text-xs text-gray-400">
-        © HireVan · 밴쿠버 한인 커뮤니티를 위해
+        {t('landing.footer')}
       </footer>
 
-      {/* ───── Event Popup (첫 공고 무료 이벤트) ────
-       *  - storageKey 를 이벤트별로 다르게 주면, 한 페이지에서
-       *    여러 종류의 팝업을 동시에 운용할 수 있다.
-       *  - "1주일간 보지 않기" 체크박스는 기본 노출.
-       *    끄고 싶으면 hideCheckboxLabel={false} 로 주면 된다.
-       */}
+      {/* ───── Event Popup ──── */}
       <EventPopup
-        title="🎉채용계정 신규 가입 이벤트🎉"
-        description={`가입 후 첫 구인공고를 올리면 Pro 멤버십 1개월이 무료!\n이력서 요청 + 사전질문까지, 맞춤 지원자와 채팅하세요.`}
+        title={t('event_popup.first_job_title')}
+        description={t('event_popup.first_job_desc')}
         imageSrc="/event/first-job-free.png"
-        imageAlt="첫 공고 무료 이벤트 배너"
-        buttonText="공고 올리고 Pro 받기"
+        imageAlt={t('event_popup.first_job_title')}
+        buttonText={t('event_popup.first_job_button')}
         storageKey="event:first-job-free:dismissed"
+        hideCheckboxLabel={t('event_popup.hide_week')}
         onButtonClick={() => {
-          // CTA 클릭 시 페이지 내 안내 섹션으로 스크롤 등 원하는 동작
           window.location.href = '/employer/jobs/new'
         }}
       />
@@ -219,29 +211,26 @@ export default function LandingPage() {
 
 /* ─────────────────────────────────────────────
  *  DynamicContent
- *  - 선택된 유형의 상세 가이드를 보여주는 섹션
- *  - 등장 시 `animate-fade-in-up` 으로 부드럽게 표시
  * ───────────────────────────────────────────── */
 function DynamicContent({
   config,
   onStart,
+  t,
 }: {
   config: RoleConfig
   onStart: (type: UserType) => void
+  t: (key: string) => string
 }) {
   return (
     <section className="mt-2 animate-fade-in-up">
       <div className="bg-white rounded-3xl border border-gray-100 shadow-sm overflow-hidden">
-        {/* GIF placeholder */}
-        {/* 수정된 부분: Placeholder div 대신 img 태그 사용 */}
-        <div className="relative w-full h-40"> {/* h-48 → h-40 */}
+        <div className="relative w-full h-40">
           <img
             src={config.imagePath}
-            alt={`${config.label} 가이드`}
+            alt={`${config.labelKey} guide`}
             className="w-full h-full object-contain p-2"
           />
 
-          {/* 우측 상단 태그는 그대로 유지 */}
           <span
             className="absolute top-3 left-3 inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/90 backdrop-blur text-[11px] font-semibold"
             style={{ color: config.accent }}
@@ -254,16 +243,14 @@ function DynamicContent({
           </span>
         </div>
 
-        {/* 텍스트 콘텐츠 */}
         <div className="p-6 sm:p-8">
           <h2 className="text-xl sm:text-2xl font-bold text-gray-900 mb-2">
-            {config.longHeadline}
+            {config.longHeadlineKey}
           </h2>
           <p className="text-sm sm:text-base text-gray-500 leading-relaxed mb-6">
-            {config.longDesc}
+            {config.longDescKey}
           </p>
 
-          {/* 3-step 카드 */}
           <ol className="space-y-3 mb-7">
             {config.steps.map(step => (
               <li
@@ -278,17 +265,16 @@ function DynamicContent({
                 </span>
                 <div className="min-w-0">
                   <p className="font-semibold text-gray-900 text-sm sm:text-base">
-                    {step.title}
+                    {step.titleKey}
                   </p>
                   <p className="text-xs sm:text-sm text-gray-500 mt-0.5">
-                    {step.desc}
+                    {step.descKey}
                   </p>
                 </div>
               </li>
             ))}
           </ol>
 
-          {/* CTA */}
           <div className='flex flex-col items-center'>
             <button
               type="button"
@@ -299,7 +285,7 @@ function DynamicContent({
                 boxShadow: `0 8px 20px -8px ${config.accent}aa`,
               }}
             >
-              {config.cta}
+              {config.ctaKey}
               <svg
                 className="w-4 h-4"
                 viewBox="0 0 20 20"
@@ -314,16 +300,15 @@ function DynamicContent({
               </svg>
             </button>
 
-          {/* 로그인 페이지로의 보조 링크 */}
             <p className="text-xs text-gray-400 mt-4">
-              이미 회원이신가요?{' '}
+              {t('landing.already_member')}{' '}
               <button
                 type="button"
                 onClick={() => onStart(config.id)}
                 className="font-semibold hover:underline"
                 style={{ color: config.accent }}
               >
-                로그인하기
+                {t('landing.login_link')}
               </button>
             </p>
           </div>

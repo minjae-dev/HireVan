@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
+import { useLanguage } from '@/context/LanguageContext'
 
 type MessagePreview = { content: string; created_at: string }
 
@@ -32,7 +33,7 @@ type GroupedRooms = {
   lastMessageAt: string
 }
 
-function formatRelativeTime(iso: string): string {
+function formatRelativeTime(iso: string, t: (key: string) => string): string {
   const date = new Date(iso)
   const now = new Date()
   const diffMs = now.getTime() - date.getTime()
@@ -40,16 +41,17 @@ function formatRelativeTime(iso: string): string {
   const diffHour = Math.floor(diffMs / (1000 * 60 * 60))
   const diffDay = Math.floor(diffMs / (1000 * 60 * 60 * 24))
 
-  if (diffMin < 1) return '방금 전'
-  if (diffMin < 60) return `${diffMin}분 전`
-  if (diffHour < 24) return `${diffHour}시간 전`
-  if (diffDay < 7) return `${diffDay}일 전`
+  if (diffMin < 1) return t('chat.just_now')
+  if (diffMin < 60) return `${diffMin}${t('chat.minutes_ago')}`
+  if (diffHour < 24) return `${diffHour}${t('chat.hours_ago')}`
+  if (diffDay < 7) return `${diffDay}${t('chat.days_ago')}`
   return date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric' })
 }
 
 export default function ChatListPage() {
   const { user, profile, loading } = useAuth()
   const router = useRouter()
+  const { t } = useLanguage()
   const [rooms, setRooms] = useState<ChatRoomRow[]>([])
   const [fetching, setFetching] = useState(true)
   const [expandedJobs, setExpandedJobs] = useState<Set<string>>(new Set())
@@ -178,30 +180,30 @@ export default function ChatListPage() {
 
   return (
     <div>
-      <h1 className="text-xl font-bold text-gray-900 mb-1">채팅</h1>
+      <h1 className="text-xl font-bold text-gray-900 mb-1">{t('chat.title')}</h1>
       <p className="text-sm text-gray-500 mb-5">
         {isEmployer
-          ? '내 공고별로 진행 중인 대화를 관리하세요'
-          : '지원한 공고별로 진행 중인 대화를 확인하세요'}
+          ? t('chat.subtitle_employer')
+          : t('chat.subtitle_seeker')}
       </p>
 
       {groupedRooms.length === 0 ? (
         <div className="text-center py-20 text-gray-400">
           <p className="text-4xl mb-3">💬</p>
-          <p className="text-sm">아직 진행 중인 채팅이 없습니다</p>
+          <p className="text-sm">{t('chat.no_chats')}</p>
           {isEmployer ? (
             <Link
               href="/employer/jobs"
               className="inline-block mt-4 text-sm text-orange-500 font-medium hover:underline"
             >
-              내 구인글 관리 →
+              {t('chat.my_jobs_link')}
             </Link>
           ) : (
             <Link
               href="/jobs"
               className="inline-block mt-4 text-sm text-orange-500 font-medium hover:underline"
             >
-              구인글 둘러보기 →
+              {t('chat.browse_jobs_link')}
             </Link>
           )}
         </div>
@@ -231,7 +233,7 @@ export default function ChatListPage() {
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-0.5">
                       <p className="font-semibold text-gray-900 text-sm truncate">
-                        {group.job_post?.title ?? '공고'}
+                        {group.job_post?.title ?? ''}
                       </p>
                       {group.job_post && (
                         <span
@@ -241,12 +243,12 @@ export default function ChatListPage() {
                               : 'bg-gray-100 text-gray-500'
                           }`}
                         >
-                          {isJobOpen ? '모집중' : '마감'}
+                          {isJobOpen ? t('common.open') : t('common.closed')}
                         </span>
                       )}
                     </div>
                     <p className="text-xs text-gray-400">
-                      {group.rooms.length}명 · 최근 활동 {formatRelativeTime(group.lastMessageAt)}
+                      {t('chat.room_count', { count: group.rooms.length })} · {t('chat.recent_activity', { time: formatRelativeTime(group.lastMessageAt, t) })}
                     </p>
                   </div>
                   <span
@@ -284,16 +286,16 @@ export default function ChatListPage() {
                             </div>
                             <div className="flex-1 min-w-0">
                               <p className="font-medium text-gray-900 text-sm">
-                                {otherName ?? '상대방'}
+                                {otherName ?? t('chat.other_person')}
                               </p>
                               <p className="text-xs text-gray-400 mt-0.5 line-clamp-1">
-                                {lastMessage ?? '아직 메시지가 없습니다'}
+                                {lastMessage ?? t('chat.no_messages')}
                               </p>
                             </div>
                             <div className="flex items-center gap-1.5 flex-shrink-0">
                               {room.interview_completed && (
                                 <span className="text-[10px] font-semibold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">
-                                  면접완료
+                                  {t('chat.interview_complete')}
                                 </span>
                               )}
                             </div>

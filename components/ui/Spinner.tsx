@@ -17,7 +17,7 @@ const SIZE_CLASS: Record<NonNullable<SpinnerProps['size']>, string> = {
  * 모든 페이지에서 `className="w-6 h-6 border-2 border-orange-400 border-t-transparent rounded-full animate-spin"`
  * 가 반복되어 하나로 통합했다.
  */
-export default function Spinner({ size = 'md', className = '', label = '로딩 중' }: SpinnerProps) {
+export default function Spinner({ size = 'md', className = '', label = 'Loading...' }: SpinnerProps) {
   return (
     <div
       role="status"
@@ -41,7 +41,7 @@ const PADDING: Record<NonNullable<CenteredSpinnerProps['paddingY']>, string> = {
 
 /** 페이지/섹션 중앙에 표시되는 표준 로딩 fallback. */
 export function CenteredSpinner({
-  label = '잠시만요...',
+  label = 'Just a moment...',
   paddingY = 'lg',
 }: CenteredSpinnerProps) {
   return (

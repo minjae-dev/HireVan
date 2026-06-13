@@ -5,8 +5,10 @@
 import BlurredSeekerCard from '@/components/BlurredSeekerCard'
 import GracePeriodBanner from '@/components/GracePeriodBanner'
 import ProUpsellModal from '@/components/ProUpsellModal'
+import { useLanguage } from '@/context/LanguageContext'
 import { useAuth } from '@/lib/auth-context'
 import type { Database, EmployerBillingStatus, PublicProfile } from '@/lib/database.types'
+import { getLocations } from '@/lib/options'
 import { supabase } from '@/lib/supabase'
 import { usePollProUpgrade } from '@/lib/usePollProUpgrade'
 import { useSeekerAccess } from '@/lib/useSeekerAccess'
@@ -15,31 +17,6 @@ import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
 type JobPost = Database['public']['Tables']['job_posts']['Row']
-
-// ---------------------------------------------------------------------------
-// 필터 옵션 (한국 밴쿠버 채용 시장 기준)
-// ---------------------------------------------------------------------------
-const NEIGHBORHOOD_OPTIONS = [
-  { value: '5', label: '밴쿠버' },
-  { value: '1', label: '버나비' },
-  { value: '2', label: '코퀴틀람' },
-  { value: '4', label: '써리' },
-  { value: '11', label: '랭리' },
-  { value: '14', label: '포트코퀴틀람' },
-  { value: '6', label: '노스밴쿠버' },
-  { value: '7', label: '웨스트밴쿠버' },
-  { value: '3', label: '포트무디' },
-  { value: '9', label: '리치몬드' },
-  { value: '12', label: '델타' },
-  { value: '15', label: '뉴웨스터민스터' },
-  { value: '8', label: '메이플릿지' },
-  { value: '10', label: '화이트락' },
-  { value: '16', label: '핏메도우' },
-  { value: '17', label: '재스퍼' },
-  { value: '19', label: '아보츠포드' },
-  { value: '20', label: '킬로나' },
-  { value: '13', label: '기타' },
-] as const
 
 const CERT_OPTIONS = [
   { code: 'sir', label: '🍷 Serving It Right' },
@@ -52,6 +29,8 @@ const CERT_OPTIONS = [
 export default function EmployerDashboardPage() {
   const { user, profile, loading: authLoading, refreshProfile } = useAuth()
   const router = useRouter()
+  const { t } = useLanguage()
+  const NEIGHBORHOOD_OPTIONS = getLocations(t)
 
   // 인증 & 권한 가드
   useEffect(() => {
@@ -228,12 +207,12 @@ export default function EmployerDashboardPage() {
       <header className="rounded-3xl border border-gray-100 bg-white p-6">
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="min-w-0">
-            <p className="text-xs font-semibold text-orange-500">Employer Dashboard</p>
+            <p className="text-xs font-semibold text-orange-500">{t('employer.dashboard_title')}</p>
             <h1 className="mt-1 truncate text-2xl font-extrabold text-gray-900">
-              {profile.name || '고용주'} 님, 안녕하세요 👋
+              {t('employer.greeting', { name: profile.name || '' })}
             </h1>
             <p className="mt-1 text-sm text-gray-500">
-              오늘도 좋은 구직자를 만나보세요.
+              {t('employer.greeting_sub')}
             </p>
           </div>
           <PlanBadge billing={billing} loading={billingLoading} />
@@ -296,14 +275,14 @@ export default function EmployerDashboardPage() {
       <section className="rounded-3xl border border-gray-100 bg-white p-6">
         <div className="mb-4 flex items-end justify-between gap-3">
           <div>
-            <h2 className="text-lg font-bold text-gray-900">🔍 구직자 둘러보기</h2>
+            <h2 className="text-lg font-bold text-gray-900">{t('employer.browse_seekers')}</h2>
             <p className="mt-0.5 text-xs text-gray-500">
-              조건에 맞는 구직자를 검색하고 상세 프로필을 열어보세요.
+              {t('employer.browse_seekers_desc')}
             </p>
           </div>
           {!isPro && (
             <span className="rounded-full bg-orange-50 px-3 py-1 text-[11px] font-bold text-orange-600">
-              {creditsRemaining} 크레딧 남음
+              {t('employer.credits_remaining', { count: creditsRemaining })}
             </span>
           )}
         </div>
@@ -313,15 +292,15 @@ export default function EmployerDashboardPage() {
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
             <div>
               <label className="mb-1.5 block text-[11px] font-semibold text-gray-500">
-                거주 구역
+                {t('employer.filter_neighborhood')}
               </label>
               <select
                 value={filterNeighborhood}
                 onChange={e => setFilterNeighborhood(e.target.value)}
                 className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
               >
-                <option value="">전체 보기</option>
-                {NEIGHBORHOOD_OPTIONS.map(n => (
+                <option value="">{t('employer.filter_neighborhood_all')}</option>
+                {NEIGHBORHOOD_OPTIONS.map((n: { value: string; label: string }) => (
                     <option key={n.value} value={n.value}>
                       {n.label}
                     </option>
@@ -330,14 +309,14 @@ export default function EmployerDashboardPage() {
             </div>
             <div>
               <label className="mb-1.5 block text-[11px] font-semibold text-gray-500">
-                보유 자격증
+                {t('employer.filter_cert')}
               </label>
               <select
                 value={filterCert}
                 onChange={e => setFilterCert(e.target.value)}
                 className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
               >
-                <option value="">전체 보기</option>
+                <option value="">{t('employer.filter_cert_all')}</option>
                 {CERT_OPTIONS.map(c => (
                   <option key={c.code} value={c.code}>
                     {c.label}
@@ -353,7 +332,7 @@ export default function EmployerDashboardPage() {
             className="mt-3 w-full rounded-xl py-2.5 text-sm font-bold text-white transition-all active:scale-95 disabled:opacity-60"
             style={{ backgroundColor: 'var(--brand)' }}
           >
-            {seekersLoading ? '검색 중...' : searched ? '🔄 다시 검색' : '🔍 구직자 검색'}
+            {seekersLoading ? t('employer.searching') : searched ? t('employer.search_again') : t('employer.search_btn')}
           </button>
         </div>
 
@@ -362,11 +341,10 @@ export default function EmployerDashboardPage() {
           <div className="rounded-2xl border border-dashed border-orange-200 bg-orange-50/50 p-5 text-center">
             <p className="text-3xl">🔓</p>
             <p className="mt-2 text-sm font-semibold text-gray-800">
-              가입 시 받은 {Math.max(creditsRemaining, 0)}개의 웰컴 크레딧으로 {Math.max(creditsRemaining, 0)}명의
-              구직자 상세 프로필을 열어볼 수 있어요.
+              {t('employer.free_banner_title', { credits: Math.max(creditsRemaining, 0) })}
             </p>
             <p className="mt-1 text-xs text-gray-500">
-              그 이상은 PRO 플랜 ($29/월)에서 무제한으로 제공됩니다.
+              {t('employer.free_banner_desc')}
             </p>
             <button
               type="button"
@@ -377,7 +355,7 @@ export default function EmployerDashboardPage() {
               }}
               className="mt-4 inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all active:scale-95"
             >
-              ✨ PRO로 업그레이드
+              {t('employer.free_banner_cta')}
             </button>
           </div>
         )}
@@ -393,10 +371,10 @@ export default function EmployerDashboardPage() {
               <div className="rounded-2xl border border-gray-200 bg-white py-10 text-center">
                 <p className="text-3xl">😶</p>
                 <p className="mt-2 text-sm font-semibold text-gray-700">
-                  조건에 맞는 구직자가 없어요
+                  {t('employer.no_seekers')}
                 </p>
                 <p className="mt-1 text-xs text-gray-500">
-                  필터를 조정하거나, 조금 더 기다려보세요.
+                  {t('employer.no_seekers_desc')}
                 </p>
               </div>
             ) : (
@@ -486,6 +464,7 @@ function BillingSummary({
   onRequestUpgrade,
 }: BillingSummaryProps) {
   const { session } = useAuth()
+  const { t } = useLanguage()
   const [openingPortal, setOpeningPortal] = useState(false)
   const [portalError, setPortalError] = useState<string | null>(null)
 
@@ -558,7 +537,7 @@ function BillingSummary({
                 </p>
                 {isScheduledToCancel && (
                   <span className="inline-flex items-center rounded-md bg-amber-100 px-2 py-0.5 text-[10px] font-bold text-amber-800 animate-pulse">
-                    해지 예약됨
+                    {t('employer.billing_cancel_scheduled')}
                   </span>
                 )}
               </div>
@@ -566,30 +545,30 @@ function BillingSummary({
               {isScheduledToCancel ? (
                 <>
                   <h2 className="mt-1.5 text-lg font-extrabold text-gray-900 tracking-tight">
-                    ⏳ 멤버십이 곧 만료될 예정이에요
+                    ⏳ {t('employer.billing_cancel_expiring')}
                   </h2>
                   <p className="mt-1 text-sm text-gray-600">
                     {formattedEndDate ? (
-                      <>이용 가능 기한: <strong className="text-amber-700 font-extrabold">{formattedEndDate}</strong>까지</>
+                      <>{t('employer.billing_until')} <strong className="text-amber-700 font-extrabold">{formattedEndDate}</strong></>
                     ) : (
-                      '멤버십이 곧 종료됩니다.'
+                      t('employer.billing_expiring_soon')
                     )}
                   </p>
                   <p className="mt-1.5 text-xs font-medium text-amber-700/90 leading-relaxed">
-                    해당 날짜 이후에는 FREE 플랜으로 자동 전환되며, 더 이상 구직자 프로필을 무제한으로 열람할 수 없게 됩니다.
+                    {t('employer.billing_cancel_warning')}
                   </p>
                 </>
               ) : (
                 <>
                   <h2 className="mt-1.5 text-lg font-extrabold text-gray-900 tracking-tight">
-                    🎉 PRO 플랜이 활성화되어 있어요
+                    🎉 {t('employer.billing_active_title')}
                   </h2>
                   <p className="mt-1 text-sm text-gray-600">
-                    밴쿠버 모든 구직자 프로필을 제약 없이 무제한으로 열람할 수 있습니다.
+                    {t('employer.billing_active_desc')}
                   </p>
                   {formattedEndDate && (
                     <p className="mt-2 text-xs text-gray-500 font-medium">
-                      다음 정기 결제일: <strong className="text-gray-800 font-bold">{formattedEndDate}</strong>
+                      {t('employer.billing_next_payment')}: <strong className="text-gray-800 font-bold">{formattedEndDate}</strong>
                     </p>
                   )}
                 </>
@@ -602,7 +581,7 @@ function BillingSummary({
                 onClick={onRequestUpgrade}
                 className="flex-shrink-0 cursor-pointer rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-4 py-2.5 text-xs font-extrabold text-white shadow-md shadow-orange-500/20 transition-all hover:opacity-90 active:scale-95"
               >
-                🔄 멤버십 유지하기
+                🔄 {t('employer.billing_keep_subscription')}
               </button>
             ) : (
               <button
@@ -611,7 +590,7 @@ function BillingSummary({
                 disabled={openingPortal}
                 className="flex-shrink-0 cursor-pointer rounded-full border border-orange-200 bg-white px-4 py-2 text-xs font-bold text-orange-600 hover:bg-orange-50/50 transition-all active:scale-95 disabled:opacity-60"
               >
-                {openingPortal ? '이동 중...' : '구독 관리'}
+                {openingPortal ? t('employer.billing_portal_opening') : t('employer.billing_manage')}
               </button>
             )}
           </div>
@@ -619,7 +598,7 @@ function BillingSummary({
           {isScheduledToCancel && (
             <div className="rounded-2xl border border-amber-200 bg-white/80 p-4 shadow-sm">
               <p className="text-xs font-medium text-gray-700 leading-relaxed">
-                💡 걱정하지 마세요! 아직 <strong className="text-gray-900">{formattedEndDate || '이번 달 결제 기간'}</strong>까지는 현재의 모든 PRO 기능과 혜택을 끊김 없이 정상적으로 이용하실 수 있습니다. 혜택 유지를 원하시면 만료 전에 언제든 다시 구독을 재개해보세요.
+                💡 {t('employer.billing_cancel_reassurance', { date: formattedEndDate || t('employer.billing_current_period') })}
               </p>
             </div>
           )}
@@ -641,10 +620,10 @@ function BillingSummary({
             Current Plan
           </p>
           <h2 className="mt-1 text-lg font-extrabold text-gray-900">
-            FREE 플랜 · 웰컴 크레딧 {creditsRemaining}개
+            {t('employer.billing_free_plan', { credits: creditsRemaining })}
           </h2>
           <p className="mt-1 text-sm text-gray-600">
-            PRO로 업그레이드하면 무제한 열람과 스마트 매칭을 이용할 수 있어요.
+            {t('employer.billing_free_desc')}
           </p>
         </div>
         <button
@@ -652,23 +631,23 @@ function BillingSummary({
           onClick={onRequestUpgrade}
           className="flex-shrink-0 cursor-pointer rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-4 py-2 text-xs font-extrabold text-white shadow-md transition-all active:scale-95"
         >
-          ✨ PRO 업그레이드
+          ✨ {t('common.upgrade')}
         </button>
       </div>
 
       <div className="mt-4 grid grid-cols-3 gap-2 text-center text-xs">
         <div className="rounded-2xl bg-orange-50 px-3 py-2.5">
-          <p className="text-[10px] font-semibold text-orange-600">상세 프로필</p>
+          <p className="text-[10px] font-semibold text-orange-600">{t('employer.billing_free_profile')}</p>
           <p className="mt-0.5 text-sm font-extrabold text-gray-900">
             {creditsRemaining}회
           </p>
         </div>
         <div className="rounded-2xl bg-gray-50 px-3 py-2.5">
-          <p className="text-[10px] font-semibold text-gray-500">스마트 매칭</p>
+          <p className="text-[10px] font-semibold text-gray-500">{t('employer.billing_free_matching')}</p>
           <p className="mt-0.5 text-sm font-extrabold text-gray-400">🔒</p>
         </div>
         <div className="rounded-2xl bg-gray-50 px-3 py-2.5">
-          <p className="text-[10px] font-semibold text-gray-500">필터 검색</p>
+          <p className="text-[10px] font-semibold text-gray-500">{t('employer.billing_free_filter')}</p>
           <p className="mt-0.5 text-sm font-extrabold text-gray-400">🔒</p>
         </div>
       </div>
@@ -688,6 +667,7 @@ interface UpgradePendingBannerProps {
 }
 
 function UpgradePendingBanner({ status, elapsedMs, onRetry }: UpgradePendingBannerProps) {
+  const { t } = useLanguage()
   if (status === 'idle' || status === 'active' || status === 'error') return null
 
   const remainingSec = Math.max(0, 5 - Math.ceil(elapsedMs / 1000))
@@ -702,10 +682,10 @@ function UpgradePendingBanner({ status, elapsedMs, onRetry }: UpgradePendingBann
         <div className="h-6 w-6 flex-shrink-0 animate-spin rounded-full border-2 border-orange-400 border-t-transparent" />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold text-gray-900">
-            ✨ 결제 확인 중… (최대 5초)
+            ✨ {t('employer.upgrade_pending_title')}
           </p>
           <p className="mt-0.5 text-xs text-gray-600">
-            Stripe가 구독 정보를 반영하는 중입니다. 보통 {remainingSec}초 안에 끝나요.
+            {t('employer.upgrade_pending_desc', { sec: remainingSec })}
           </p>
         </div>
       </div>
@@ -721,10 +701,10 @@ function UpgradePendingBanner({ status, elapsedMs, onRetry }: UpgradePendingBann
         <span className="text-2xl">⏰</span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-bold text-amber-900">
-            결제가 완료되었는데 구독 상태가 아직 반영되지 않았어요.
+            {t('employer.upgrade_timeout_title')}
           </p>
           <p className="mt-0.5 text-xs text-amber-800">
-            잠시 후 자동으로 다시 확인하거나, 아래 버튼을 눌러 수동으로 동기화할 수 있어요.
+            {t('employer.upgrade_timeout_desc')}
           </p>
         </div>
         <button
@@ -732,7 +712,7 @@ function UpgradePendingBanner({ status, elapsedMs, onRetry }: UpgradePendingBann
           onClick={onRetry}
           className="flex-shrink-0 rounded-full border border-amber-400 bg-white px-4 py-2 text-xs font-bold text-amber-700 transition-all active:scale-95"
         >
-          🔄 다시 확인
+          🔄 {t('employer.upgrade_retry')}
         </button>
       </div>
     )
@@ -780,6 +760,7 @@ function PreScreeningCard({
   onSelectJob,
   onRequireUpsell,
 }: PreScreeningCardProps) {
+  const { t } = useLanguage()
   const targetJob =
     jobs.find(j => j.id === selectedJobId) ?? jobs[0] ?? null
 
@@ -819,17 +800,17 @@ function PreScreeningCard({
           </span>
         </div>
         <p className="mb-3 text-sm font-semibold text-gray-800">
-          필요한 서류와 사전 질문을 받아 더 잘 맞는 지원자를 빠르게 확인하세요.
+          {t('employer.prescreening_desc')}
         </p>
         <p className="text-xs text-gray-500">
-          먼저 공고를 하나 등록해주세요. 그 다음 이 카드에서 이력서/사전 질문 설정을 할 수 있습니다.
+          {t('employer.prescreening_no_jobs')}
         </p>
         <Link
           href="/employer/jobs/new"
           className="mt-4 inline-flex items-center gap-1.5 rounded-full px-4 py-2 text-xs font-bold text-white transition-all active:scale-95"
           style={{ backgroundColor: 'var(--brand)' }}
         >
-          ＋ 공고 등록하러 가기
+          {t('employer.prescreening_no_jobs_cta')}
         </Link>
       </section>
     )
@@ -854,7 +835,7 @@ function PreScreeningCard({
             </p>
           </div>
           <span className="rounded-full bg-orange-50 px-2.5 py-1 text-[10px] font-bold text-orange-600">
-            🔒 잠금
+            🔒
           </span>
         </div>
 
@@ -863,7 +844,7 @@ function PreScreeningCard({
           className="pointer-events-none select-none rounded-2xl border border-dashed border-gray-200 bg-gray-50/60 p-4"
         >
           <div className="mb-3 flex items-center justify-between rounded-xl border border-gray-100 bg-white px-3 py-2.5">
-            <span className="text-xs font-semibold text-gray-700">이력서 첨부 필수</span>
+            <span className="text-xs font-semibold text-gray-700">{t('jobs.resume_toggle')}</span>
             <span className="h-5 w-9 rounded-full bg-gray-200" />
           </div>
           <div className="space-y-2">
@@ -889,16 +870,16 @@ function PreScreeningCard({
 
         <div className="relative mt-4 flex flex-col items-center gap-2">
           <p className="text-center text-sm font-semibold text-gray-800">
-            이 기능은 PRO 플랜에서 사용할 수 있어요.
+            {t('employer.prescreening_locked')}
           </p>
           <button
             type="button"
             onClick={onRequireUpsell}
             className="inline-flex items-center gap-1.5 rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-5 py-2.5 text-sm font-bold text-white shadow-md transition-all active:scale-95"
           >
-            ✨ PRO로 업그레이드하고 사용하기
+            {t('employer.prescreening_locked_cta')}
           </button>
-          <p className="text-[11px] text-gray-400">월 $29 · 사전 질문 5개까지 · 이력서 필터</p>
+          <p className="text-[11px] text-gray-400">{t('employer.prescreening_locked_price')}</p>
         </div>
       </section>
     )
@@ -969,23 +950,23 @@ function PreScreeningCard({
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <div className="mb-1 flex flex-wrap items-center gap-2">
-            <h2 className="text-lg font-bold text-gray-900">📄 사전 질문 & 필수 서류</h2>
+            <h2 className="text-lg font-bold text-gray-900">{t('employer.prescreening_title')}</h2>
             <span className="rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-2 py-0.5 text-[10px] font-extrabold tracking-wider text-white">
               ✨PRO
             </span>
             <span className="rounded-full border border-orange-200 bg-white px-2 py-0.5 text-[10px] font-bold text-orange-600">
-              지원자 필터링 조건 설정
+              {t('employer.prescreening_filter_badge')}
             </span>
           </div>
           <p className="text-xs text-gray-500">
-            필요한 서류와 사전 질문을 받아 더 잘 맞는 지원자를 빠르게 확인하세요.
+            {t('employer.prescreening_desc')}
           </p>
         </div>
         <Link
           href="/employer/jobs"
           className="flex-shrink-0 text-xs font-semibold text-orange-500 hover:underline"
         >
-          전체 보기 ›
+          {t('employer.prescreening_view_all')}
         </Link>
       </div>
 
@@ -1016,7 +997,7 @@ function PreScreeningCard({
       {targetJob && (
         <div className="space-y-4">
           <p className="text-[11px] font-semibold text-gray-500">
-            적용 대상: <span className="text-gray-800">{targetJob.title}</span>
+            {t('common.filter')}: <span className="text-gray-800">{targetJob.title}</span>
           </p>
 
           <button
@@ -1032,13 +1013,13 @@ function PreScreeningCard({
           >
             <div>
               <p className="text-sm font-semibold text-gray-900">
-                📎 이력서 첨부 필수
+                📎 {t('jobs.resume_toggle')}
                 <span className="ml-1.5 rounded-full bg-gradient-to-r from-orange-500 to-pink-500 px-1.5 py-0.5 align-middle text-[9px] font-extrabold tracking-wider text-white">
                   PRO
                 </span>
               </p>
               <p className="mt-0.5 text-xs text-gray-400">
-                지원자가 이력서를 함께 제출해야 지원이 완료됩니다.
+                {t('jobs.resume_toggle_desc')}
               </p>
             </div>
             <span
@@ -1057,9 +1038,9 @@ function PreScreeningCard({
           <div className="rounded-2xl border border-gray-100 bg-white p-4">
             <div className="mb-3 flex items-center justify-between gap-3">
               <div>
-                <p className="text-sm font-semibold text-gray-900">💬 사전 질문</p>
+                <p className="text-sm font-semibold text-gray-900">{t('jobs.pre_questions_title')}</p>
                 <p className="mt-0.5 text-xs text-gray-400">
-                  지원자에게 미리 답변을 받아 빠르게 솎아내세요. (최대 {MAX_QUESTIONS_PRO}개)
+                  {t('jobs.pre_questions_max', { count: MAX_QUESTIONS_PRO })}
                 </p>
               </div>
               <button
@@ -1070,13 +1051,13 @@ function PreScreeningCard({
                 title={isPro ? undefined : 'PRO 플랜에서 사용 가능'}
                 className="flex-shrink-0 rounded-full border border-orange-200 bg-orange-50 px-3 py-1.5 text-xs font-bold text-orange-600 disabled:cursor-not-allowed disabled:border-gray-100 disabled:bg-gray-50 disabled:text-gray-300"
               >
-                + 추가
+                {t('jobs.new_job_pre_questions_add')}
               </button>
             </div>
 
             {questions.length === 0 ? (
               <p className="rounded-xl bg-gray-50 px-4 py-3 text-xs text-gray-400">
-                아직 질문이 없어요. 예: “밴쿠버 내에서 마감조 출퇴근이 원활하신가요?”
+                {t('jobs.pre_questions_empty')}
               </p>
             ) : (
               <div className="space-y-2">
@@ -1089,7 +1070,7 @@ function PreScreeningCard({
                       disabled={!isPro}
                       aria-disabled={!isPro}
                       maxLength={120}
-                      placeholder={`질문 ${index + 1}. 예: 가능한 근무 시작일은 언제인가요?`}
+                      placeholder={t('jobs.pre_questions_placeholder_q', { num: index + 1 })}
                       className="min-w-0 flex-1 rounded-xl border border-gray-200 px-3 py-2.5 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-orange-300 disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-400"
                     />
                     <button
@@ -1113,8 +1094,7 @@ function PreScreeningCard({
           )}
           {savedAt && !error && (
             <p className="rounded-xl bg-green-50 px-4 py-2.5 text-sm text-green-700">
-              ✅ 저장되었어요. 지원자에게 이력서 {requireResume ? '필수 + ' : ''}
-              {questionCount > 0 ? `사전 질문 ${questionCount}개` : ''}가 노출됩니다.
+              ✅ {t('employer.prescreening_saved', { resume: requireResume ? t('common.required') + ' + ' : '', questions: questionCount > 0 ? t('jobs.pre_questions_title') + ` ${questionCount}` : '' })}
             </p>
           )}
 
@@ -1125,7 +1105,7 @@ function PreScreeningCard({
             className="w-full rounded-2xl py-3 text-sm font-bold text-white transition-all active:scale-95 disabled:opacity-60"
             style={{ backgroundColor: 'var(--brand)' }}
           >
-            {saving ? '저장 중...' : '사전 질문 / 서류 조건 저장'}
+            {saving ? t('common.saving') : t('employer.prescreening_save')}
           </button>
         </div>
       )}

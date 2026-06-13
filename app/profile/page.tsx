@@ -3,6 +3,7 @@
 /* eslint-disable react-hooks/set-state-in-effect */
 
 import { useAuth } from '@/lib/auth-context'
+import { useLanguage } from '@/context/LanguageContext'
 import type { EmployerBillingStatus } from '@/lib/database.types'
 import { supabase } from '@/lib/supabase'
 import { usePollProUpgrade } from '@/lib/usePollProUpgrade'
@@ -28,6 +29,7 @@ const VISA_OPTIONS = ['워킹홀리데이', '학생비자', '취업비자', '영
 
 export default function ProfilePage() {
   const { user, profile, loading, refreshProfile } = useAuth()
+  const { t } = useLanguage()
   const router = useRouter()
   const [name, setName] = useState('')
   const [bio, setBio] = useState('')
@@ -151,14 +153,14 @@ export default function ProfilePage() {
     ]
 
     if (!allowedTypes.includes(file.type)) {
-      setResumeError('PDF, DOC, DOCX 파일만 업로드할 수 있습니다.')
+      setResumeError(t('profile.resume_error_type'))
       setResumeUploading(false)
       event.target.value = ''
       return
     }
 
     if (file.size > 10 * 1024 * 1024) {
-      setResumeError('이력서는 10MB 이하 파일만 업로드할 수 있습니다.')
+      setResumeError(t('profile.resume_error_size'))
       setResumeUploading(false)
       event.target.value = ''
       return
@@ -176,7 +178,7 @@ export default function ProfilePage() {
 
     if (uploadError) {
       console.error('Storage upload error:', uploadError)
-      setResumeError(`이력서 업로드 실패: ${uploadError.message}`)
+      setResumeError(t('profile.resume_error_failed', { message: uploadError.message }))
       setResumeUploading(false)
       event.target.value = ''
       return
@@ -201,7 +203,7 @@ export default function ProfilePage() {
       .single()
 
     if (upsertError || !data) {
-      setResumeError('이력서 정보를 저장하지 못했습니다. 다시 시도해주세요.')
+      setResumeError(t('profile.resume_error_save'))
     } else {
       setResume(data as Resume)
     }
@@ -224,7 +226,7 @@ export default function ProfilePage() {
       .eq('id', user.id)
 
     if (error) {
-      setError('저장에 실패했습니다.')
+      setError(t('profile.save_error'))
     } else {
       await refreshProfile()
       setSuccess(true)
@@ -243,7 +245,7 @@ export default function ProfilePage() {
 
   if (!profile) return null
 
-  const roleLabel = profile.role === 'employer' ? '업체 (구인)' : '구직자'
+  const roleLabel = profile.role === 'employer' ? t('profile.role_employer') : t('profile.role_seeker')
   const roleColor = profile.role === 'employer' ? 'bg-blue-100 text-blue-700' : 'bg-green-100 text-green-700'
   const averageRating = reviews.length > 0
     ? (reviews.reduce((acc, review) => acc + review.rating, 0) / reviews.length).toFixed(1)
@@ -269,10 +271,10 @@ export default function ProfilePage() {
           <div className="h-6 w-6 flex-shrink-0 animate-spin rounded-full border-2 border-orange-400 border-t-transparent" />
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold text-gray-900">
-              ✨ 결제 확인 중… (최대 5초)
+              {t('employer.upgrade_pending_title')}
             </p>
             <p className="mt-0.5 text-xs text-gray-600">
-              Stripe가 구독 정보를 반영하는 중입니다. 보통 {remainingSec}초 안에 끝나요.
+              {t('employer.upgrade_pending_desc', { sec: remainingSec })}
             </p>
           </div>
         </div>
@@ -285,10 +287,10 @@ export default function ProfilePage() {
           <span className="text-2xl">⏰</span>
           <div className="min-w-0 flex-1">
             <p className="text-sm font-bold text-amber-900">
-              결제가 완료되었는데 구독 상태가 아직 반영되지 않았어요.
+              {t('employer.upgrade_timeout_title')}
             </p>
             <p className="mt-0.5 text-xs text-amber-800">
-              잠시 후 자동으로 다시 확인하거나, 아래 버튼을 눌러 수동으로 동기화할 수 있어요.
+              {t('employer.upgrade_timeout_desc')}
             </p>
           </div>
           <button
@@ -299,7 +301,7 @@ export default function ProfilePage() {
             }}
             className="flex-shrink-0 rounded-full border border-amber-400 bg-white px-4 py-2 text-xs font-bold text-amber-700 transition-all active:scale-95"
           >
-            🔄 다시 확인
+            {t('employer.upgrade_retry')}
           </button>
         </div>
       )}
@@ -313,7 +315,7 @@ export default function ProfilePage() {
             {profile.name ? profile.name[0] : '?'}
           </div>
           <div>
-            <h1 className="text-xl font-bold text-gray-900">{profile.name || '이름 없음'}</h1>
+            <h1 className="text-xl font-bold text-gray-900">{profile.name || t('profile.no_name')}</h1>
             <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${roleColor}`}>
               {roleLabel}
             </span>
@@ -322,14 +324,14 @@ export default function ProfilePage() {
             href="/profile/edit"
             className="flex-shrink-0 rounded-full border border-orange-300 bg-white px-4 py-2 text-xs font-bold text-orange-600 transition-all active:scale-95 hover:bg-orange-50"
           >
-            ✏️ 수정
+            {t('profile.edit_btn')}
           </Link>
         </div>
 
         <form onSubmit={handleSave} className="flex flex-col gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              {profile.role === 'employer' ? '업체명' : '이름'}
+              {profile.role === 'employer' ? t('profile.name_employer') : t('profile.name_seeker')}
             </label>
             <input
               type="text"
@@ -343,14 +345,14 @@ export default function ProfilePage() {
           {profile.role === 'seeker' && (
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                비자 종류
+                {t('profile.visa_type')}
               </label>
               <select
                 value={visaType}
                 onChange={e => setVisaType(e.target.value)}
                 className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent bg-white"
               >
-                <option value="">선택해주세요</option>
+                <option value="">{t('profile.visa_select')}</option>
                 {VISA_OPTIONS.map(v => (
                   <option key={v} value={v}>{v}</option>
                 ))}
@@ -360,13 +362,13 @@ export default function ProfilePage() {
 
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1.5">
-              {profile.role === 'employer' ? '업체 소개' : '자기소개'}
+              {profile.role === 'employer' ? t('profile.bio_employer') : t('profile.bio_seeker')}
             </label>
             <textarea
               value={bio}
               onChange={e => setBio(e.target.value)}
               rows={4}
-              placeholder={profile.role === 'employer' ? '업체 업종, 위치 등을 소개해주세요' : '경력, 특기 등을 소개해주세요'}
+              placeholder={profile.role === 'employer' ? t('profile.bio_placeholder_employer') : t('profile.bio_placeholder_seeker')}
               className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent resize-none"
             />
           </div>
@@ -376,7 +378,7 @@ export default function ProfilePage() {
           )}
 
           {success && (
-            <p className="text-sm text-green-600 bg-green-50 rounded-xl px-4 py-3">저장되었습니다!</p>
+            <p className="text-sm text-green-600 bg-green-50 rounded-xl px-4 py-3">{t('profile.save_success')}</p>
           )}
 
           <button
@@ -385,7 +387,7 @@ export default function ProfilePage() {
             className="w-full text-white font-semibold py-3 rounded-xl transition-all active:scale-95 disabled:opacity-60"
             style={{ backgroundColor: 'var(--brand)' }}
           >
-            {saving ? '저장 중...' : '저장하기'}
+            {saving ? t('common.saving') : t('common.save')}
           </button>
         </form>
       </div>
@@ -394,12 +396,12 @@ export default function ProfilePage() {
         <div className="bg-white rounded-2xl border border-gray-100 p-5 mb-4">
           <div className="flex items-start justify-between gap-4 mb-4">
             <div>
-              <p className="text-xs font-semibold text-orange-500 mb-1">이력서</p>
-              <h2 className="text-lg font-bold text-gray-900">지원용 이력서</h2>
-              <p className="text-sm text-gray-500 mt-1">PDF, DOC, DOCX 파일을 등록해두면 지원할 때 사용할 수 있어요.</p>
+              <p className="text-xs font-semibold text-orange-500 mb-1">{t('profile.resume_section_title')}</p>
+              <h2 className="text-lg font-bold text-gray-900">{t('profile.resume_section_title')}</h2>
+              <p className="text-sm text-gray-500 mt-1">{t('profile.resume_section_desc')}</p>
             </div>
             <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-semibold text-orange-600">
-              무료
+              {t('profile.resume_free_badge')}
             </span>
           </div>
 
@@ -412,9 +414,9 @@ export default function ProfilePage() {
               {resume ? (
                 <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
-                    <p className="text-sm font-semibold text-gray-800">등록된 이력서가 있습니다.</p>
+                    <p className="text-sm font-semibold text-gray-800">{t('profile.resume_registered')}</p>
                     <p className="text-xs text-gray-400 mt-1">
-                      최근 수정 {new Date(resume.updated_at).toLocaleDateString('ko-KR')}
+                      {t('profile.resume_updated', { date: new Date(resume.updated_at).toLocaleDateString('ko-KR') })}
                     </p>
                   </div>
                   <a
@@ -423,13 +425,13 @@ export default function ProfilePage() {
                     rel="noreferrer"
                     className="inline-flex justify-center rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:text-orange-500"
                   >
-                    이력서 보기
+                    {t('profile.resume_view')}
                   </a>
                 </div>
               ) : (
                 <div>
-                  <p className="text-sm font-semibold text-gray-800">아직 등록된 이력서가 없습니다.</p>
-                  <p className="text-xs text-gray-400 mt-1">PRO 업체의 이력서 필수 공고에 지원하려면 먼저 등록해주세요.</p>
+                  <p className="text-sm font-semibold text-gray-800">{t('profile.resume_empty')}</p>
+                  <p className="text-xs text-gray-400 mt-1">{t('profile.resume_empty_desc')}</p>
                 </div>
               )}
             </div>
@@ -440,7 +442,7 @@ export default function ProfilePage() {
           )}
 
           <label className="mt-4 flex w-full cursor-pointer items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold text-white transition-all active:scale-95 disabled:opacity-60" style={{ backgroundColor: 'var(--brand)' }}>
-            {resumeUploading ? '업로드 중...' : resume ? '이력서 교체하기' : '이력서 업로드'}
+            {resumeUploading ? t('profile.resume_uploading') : resume ? t('profile.resume_replace') : t('profile.resume_upload')}
             <input
               type="file"
               accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
@@ -455,24 +457,24 @@ export default function ProfilePage() {
       <div className="bg-white rounded-2xl border border-gray-100 p-5 mt-4">
         <div className="flex items-start justify-between gap-4 mb-5">
           <div>
-            <p className="text-xs font-semibold text-orange-500 mb-1">매너 리포트</p>
-            <h2 className="text-lg font-bold text-gray-900">받은 후기</h2>
-            <p className="text-sm text-gray-500 mt-1">면접 후 상대방이 남긴 신뢰 점수입니다.</p>
+            <p className="text-xs font-semibold text-orange-500 mb-1">{t('profile.manner_report')}</p>
+            <h2 className="text-lg font-bold text-gray-900">{t('profile.manner_title')}</h2>
+            <p className="text-sm text-gray-500 mt-1">{t('profile.manner_desc')}</p>
           </div>
           <div className="text-right flex-shrink-0">
             <p className="text-2xl font-extrabold text-orange-500">{mannerTemperature}°C</p>
-            <p className="text-xs text-gray-400">매너온도</p>
+            <p className="text-xs text-gray-400">{t('profile.manner_temp')}</p>
           </div>
         </div>
 
         <div className="grid grid-cols-2 gap-3 mb-5">
           <div className="rounded-2xl bg-orange-50 px-4 py-3">
-            <p className="text-xs text-orange-600 mb-1">평균 별점</p>
+            <p className="text-xs text-orange-600 mb-1">{t('profile.avg_rating')}</p>
             <p className="text-xl font-bold text-gray-900">⭐ {averageRating}</p>
           </div>
           <div className="rounded-2xl bg-gray-50 px-4 py-3">
-            <p className="text-xs text-gray-500 mb-1">후기 수</p>
-            <p className="text-xl font-bold text-gray-900">{reviews.length}개</p>
+            <p className="text-xs text-gray-500 mb-1">{t('profile.review_count')}</p>
+            <p className="text-xl font-bold text-gray-900">{reviews.length}{t('common.no_data')?.includes('개') ? '' : '개'}{/* {t('profile.review_count')} handles count */}</p>
           </div>
         </div>
 
@@ -483,8 +485,8 @@ export default function ProfilePage() {
         ) : reviews.length === 0 ? (
           <div className="rounded-2xl bg-gray-50 py-8 text-center">
             <p className="text-3xl mb-2">🌱</p>
-            <p className="text-sm font-medium text-gray-500">아직 받은 후기가 없습니다.</p>
-            <p className="text-xs text-gray-400 mt-1">면접 완료 후 첫 후기를 기다려보세요.</p>
+            <p className="text-sm font-medium text-gray-500">{t('profile.no_reviews')}</p>
+            <p className="text-xs text-gray-400 mt-1">{t('profile.no_reviews_desc')}</p>
           </div>
         ) : (
           <div className="space-y-3 divide-y divide-gray-100">
@@ -492,9 +494,9 @@ export default function ProfilePage() {
               <div key={review.id} className="pt-3 first:pt-0">
                 <div className="flex items-start justify-between gap-3 mb-2">
                   <div>
-                    <p className="text-sm font-semibold text-gray-800">{review.reviewer?.name || '익명'}</p>
+                    <p className="text-sm font-semibold text-gray-800">{review.reviewer?.name || t('profile.review_anonymous')}</p>
                     <p className="text-xs text-gray-400">
-                      {review.reviewer?.role === 'employer' ? '업체' : '구직자'} · {new Date(review.created_at).toLocaleDateString('ko-KR')}
+                      {review.reviewer?.role === 'employer' ? t('profile.role_employer') : t('profile.role_seeker')} · {new Date(review.created_at).toLocaleDateString('ko-KR')}
                     </p>
                   </div>
                   <div className="flex flex-shrink-0 gap-0.5" aria-label={`${review.rating}점`}>
@@ -504,7 +506,7 @@ export default function ProfilePage() {
                   </div>
                 </div>
                 <p className="rounded-2xl bg-gray-50 px-4 py-3 text-sm leading-relaxed text-gray-600">
-                  {review.comment || '한줄평 없이 별점만 남겼습니다.'}
+                  {review.comment || t('profile.no_comment')}
                 </p>
               </div>
             ))}
@@ -515,12 +517,12 @@ export default function ProfilePage() {
       {/* My job posts link for employers */}
       {profile.role === 'employer' && (
         <div className="bg-white rounded-2xl border border-gray-100 p-5">
-          <h2 className="font-semibold text-gray-800 mb-3">내 구인글 관리</h2>
+          <h2 className="font-semibold text-gray-800 mb-3">{t('jobs.manage_jobs')}</h2>
           <Link
             href="/employer/jobs"
             className="flex items-center justify-between text-sm text-gray-600 hover:text-orange-500 transition-colors"
           >
-            <span>등록한 구인글 보기</span>
+            <span>{t('jobs.view_jobs')}</span>
             <span className="text-gray-400">›</span>
           </Link>
         </div>

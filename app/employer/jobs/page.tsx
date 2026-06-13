@@ -5,12 +5,14 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
+import { useLanguage } from '@/context/LanguageContext'
 import type { Database } from '@/lib/database.types'
 
 type JobPost = Database['public']['Tables']['job_posts']['Row']
 
 export default function EmployerJobsPage() {
   const { user, profile, loading: authLoading } = useAuth()
+  const { t } = useLanguage()
   const router = useRouter()
 
   const [jobs, setJobs] = useState<JobPost[]>([])
@@ -62,8 +64,8 @@ export default function EmployerJobsPage() {
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">내 구인글</h1>
-          <p className="text-sm text-gray-500 mt-1">등록한 구인글을 관리하세요</p>
+          <h1 className="text-2xl font-bold text-gray-900">{t('jobs.employer_jobs_title')}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t('jobs.employer_jobs_subtitle')}</p>
         </div>
         <Link
           href="/employer/jobs/new"
@@ -71,7 +73,7 @@ export default function EmployerJobsPage() {
           style={{ backgroundColor: 'var(--brand)' }}
         >
           <span>+</span>
-          <span>새 구인글</span>
+          <span>{t('jobs.new_job_btn')}</span>
         </Link>
       </div>
 
@@ -79,9 +81,9 @@ export default function EmployerJobsPage() {
       <div className="flex gap-2 mb-6">
         {(
           [
-            { value: 'all' as const, label: '전체', count: jobs.length },
-            { value: 'open' as const, label: '모집중', count: openCount },
-            { value: 'closed' as const, label: '마감', count: closedCount },
+            { value: 'all' as const, label: t('jobs.tab_all'), count: jobs.length },
+            { value: 'open' as const, label: t('jobs.tab_open'), count: openCount },
+            { value: 'closed' as const, label: t('jobs.tab_closed'), count: closedCount },
           ] as const
         ).map(({ value, label, count }) => (
           <button
@@ -105,15 +107,15 @@ export default function EmployerJobsPage() {
           <p className="text-4xl mb-3">📋</p>
           <p className="text-gray-500 text-sm mb-4">
             {filter === 'all'
-              ? '아직 등록한 구인글이 없습니다'
-              : `${filter === 'open' ? '모집 중인' : '마감된'} 구인글이 없습니다`}
+              ? t('jobs.no_jobs_all')
+              : filter === 'open' ? t('jobs.no_jobs_open') : t('jobs.no_jobs_closed')}
           </p>
           <Link
             href="/employer/jobs/new"
             className="inline-block px-6 py-2.5 rounded-full text-white font-semibold text-sm transition-all active:scale-95"
             style={{ backgroundColor: 'var(--brand)' }}
           >
-            첫 구인글 등록하기
+            {t('jobs.first_job_btn')}
           </Link>
         </div>
       ) : (
@@ -132,7 +134,7 @@ export default function EmployerJobsPage() {
                             : 'bg-gray-100 text-gray-500'
                         }`}
                       >
-                        {job.status === 'open' ? '모집중' : '마감'}
+                        {job.status === 'open' ? t('common.open') : t('common.closed')}
                       </span>
                     </div>
 
@@ -150,7 +152,7 @@ export default function EmployerJobsPage() {
                     </div>
 
                     <p className="text-xs text-gray-400">
-                      {new Date(job.created_at).toLocaleDateString('ko-KR')} 등록
+                      {new Date(job.created_at).toLocaleDateString('ko-KR')} {t('common.created_at')}
                     </p>
                   </div>
                 </div>
