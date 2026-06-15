@@ -1,5 +1,4 @@
 'use server'
-
 import { requireSupabaseAdmin } from '@/lib/supabase-admin';
 import { createServerClient } from '@supabase/ssr'; // 반드시 설치되어 있어야 합니다
 import { revalidatePath } from 'next/cache';
@@ -11,28 +10,20 @@ const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
 /**
  * 1. 공식 SSR 클라이언트 생성 함수
  */
-async function createClient() {
-  const cookieStore = await cookies();
-  
-  // 쿠키를 동기적으로 모두 가져옴
+export async function createClient() {
+  const cookieStore = await cookies(); // ★ 반드시 await 붙여야 함
   const allCookies = cookieStore.getAll();
   
-  const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
+  return createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
-      getAll() {
-        return allCookies;
-      },
-      setAll(cookiesToSet) {
-        // 이 부분은 서버 액션에서 수정하지 않으므로 비워둠
-      },
+      getAll() { return allCookies; },
+      setAll() {},
     },
   });
-
-  return supabase;
 }
 
 /**
- * 2. 관리자 권한 확인 (SSR 클라이언트 활용)
+ * 2. 관리자 권한 확인
  */
 export async function requireAdmin() {
   const cookieStore = await cookies();
