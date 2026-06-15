@@ -195,6 +195,7 @@ export interface Database {
         Row: {
           id: string
           role: 'employer' | 'seeker'
+          is_admin: boolean
           plan: 'free' | 'pro'
           name: string
           bio: string
@@ -235,6 +236,7 @@ export interface Database {
         Insert: {
           id: string
           role: 'employer' | 'seeker'
+          is_admin?: boolean
           plan?: 'free' | 'pro'
           name?: string
           bio?: string
@@ -271,6 +273,7 @@ export interface Database {
         Update: {
           id?: string
           role?: 'employer' | 'seeker'
+          is_admin?: boolean
           plan?: 'free' | 'pro'
           name?: string
           bio?: string
