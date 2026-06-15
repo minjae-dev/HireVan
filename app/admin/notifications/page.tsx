@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { supabase } from '@/lib/supabase'
+import { sendBulkNotification, type BulkNotificationTarget } from '../actions'
 
 type Notification = {
   id: string
@@ -14,11 +15,30 @@ type Notification = {
 }
 
 export default function AdminNotificationsPage() {
+  // ── 목록 상태 ──
   const [notifications, setNotifications] = useState<Notification[]>([])
   const [loading, setLoading] = useState(true)
   const [filterType, setFilterType] = useState<string>('all')
   const [searchQuery, setSearchQuery] = useState('')
 
+  // ── 발송 폼 상태 ──
+  const [target, setTarget] = useState<BulkNotificationTarget>('all')
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [sending, setSending] = useState(false)
+  const [showForm, setShowForm] = useState(false)
+
+  // ── 토스트 ──
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
+
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => setToast(null), 3000)
+      return () => clearTimeout(timer)
+    }
+  }, [toast])
+
+  // ── 데이터 조회 ──
   const fetchNotifications = async () => {
     const { data, error } = await supabase
       .from('notifications')
@@ -33,15 +53,18 @@ export default function AdminNotificationsPage() {
   }
 
   useEffect(() => {
+    let cancelled = false
     const init = async () => {
       await fetchNotifications()
     }
     init()
+    return () => { cancelled = true }
   }, [])
 
-  // 고유 타입 목록
+  // ── 고유 타입 목록 ──
   const types = ['all', ...Array.from(new Set(notifications.map((n) => n.type)))]
 
+  // ── 필터링 ──
   const filteredNotifications = notifications.filter((n) => {
     const matchesType = filterType === 'all' || n.type === filterType
     const matchesSearch =
@@ -51,7 +74,51 @@ export default function AdminNotificationsPage() {
     return matchesType && matchesSearch
   })
 
+  // ── 발송 핸들러 ──
+  const handleSend = async () => {
+    if (!title.trim()) {
+      setToast({ message: '제목을 입력해주세요.', type: 'error' })
+      return
+    }
+    if (!body.trim()) {
+      setToast({ message: '내용을 입력해주세요.', type: 'error' })
+      return
+    }
+
+    setSending(true)
+    try {
+      const result = await sendBulkNotification({
+        target,
+        title: title.trim(),
+        body: body.trim(),
+        type: 'admin_broadcast',
+      })
+
+      if (result.success) {
+        setToast({ message: result.message, type: 'success' })
+        setTitle('')
+        setBody('')
+        setShowForm(false)
+        // 목록 새로고침
+        await fetchNotifications()
+      } else {
+        setToast({ message: result.message, type: 'error' })
+      }
+    } catch {
+      setToast({ message: '알림 발송 중 오류가 발생했습니다.', type: 'error' })
+    } finally {
+      setSending(false)
+    }
+  }
+
+  const targetLabels: Record<BulkNotificationTarget, string> = {
+    all: '전체 회원',
+    employer: '채용자만',
+    seeker: '구직자만',
+  }
+
   const typeColors: Record<string, string> = {
+    admin_broadcast: 'bg-purple-50 text-purple-600',
     job_match: 'bg-blue-50 text-blue-600',
     seeker_match: 'bg-green-50 text-green-600',
     payment_failed: 'bg-red-50 text-red-600',
@@ -64,14 +131,141 @@ export default function AdminNotificationsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-bold text-gray-900">알림 관리</h1>
-        <p className="text-sm text-gray-500 mt-1">
-          시스템에서 발송된 알림 목록입니다. ({notifications.length}건)
-        </p>
+      {/* ── 헤더 ── */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900">알림 관리</h1>
+          <p className="text-sm text-gray-500 mt-1">
+            회원들에게 알림을 발송하고 발송 내역을 확인합니다. ({notifications.length}건)
+          </p>
+        </div>
+        <button
+          onClick={() => setShowForm(!showForm)}
+          className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold text-white transition-all active:scale-95"
+          style={{ backgroundColor: 'var(--brand)' }}
+        >
+          <span>{showForm ? '▲ 닫기' : '🔔 알림 발송'}</span>
+        </button>
       </div>
 
-      {/* 필터 & 검색 */}
+      {/* ── 토스트 ── */}
+      {toast && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="fixed inset-x-0 bottom-6 z-50 flex justify-center px-4 pointer-events-none"
+        >
+          <div
+            className={`pointer-events-auto max-w-sm rounded-2xl px-4 py-3 text-sm font-semibold shadow-lg ring-1 ${
+              toast.type === 'success'
+                ? 'bg-green-50 text-green-800 ring-green-200'
+                : 'bg-red-50 text-red-800 ring-red-200'
+            }`}
+          >
+            <span className="mr-1">{toast.type === 'success' ? '✅' : '⚠️'}</span>
+            {toast.message}
+          </div>
+        </div>
+      )}
+
+      {/* ── 발송 폼 ── */}
+      {showForm && (
+        <div className="bg-white rounded-2xl border border-gray-100 p-6 space-y-5">
+          <h2 className="text-lg font-bold text-gray-900">알림 발송</h2>
+
+          {/* 타겟 선택 */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1.5">
+              발송 대상
+            </label>
+            <div className="flex gap-2">
+              {(Object.keys(targetLabels) as BulkNotificationTarget[]).map((key) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setTarget(key)}
+                  className={`px-4 py-2 rounded-xl text-sm font-medium transition-all ${
+                    target === key
+                      ? 'bg-orange-50 text-orange-600 ring-2 ring-orange-300'
+                      : 'bg-gray-50 text-gray-600 hover:bg-gray-100'
+                  }`}
+                >
+                  {targetLabels[key]}
+                </button>
+              ))}
+            </div>
+            <p className="text-xs text-gray-400 mt-1.5">
+              {target === 'all'
+                ? '모든 회원에게 발송됩니다.'
+                : target === 'employer'
+                  ? '채용자(employer)에게만 발송됩니다.'
+                  : '구직자(seeker)에게만 발송됩니다.'}
+            </p>
+          </div>
+
+          {/* 제목 */}
+          <div>
+            <label htmlFor="notif-title" className="block text-sm font-medium text-gray-700 mb-1.5">
+              제목
+            </label>
+            <input
+              id="notif-title"
+              type="text"
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              placeholder="예: 서비스 점검 안내"
+              maxLength={100}
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+            />
+          </div>
+
+          {/* 내용 */}
+          <div>
+            <label htmlFor="notif-body" className="block text-sm font-medium text-gray-700 mb-1.5">
+              내용
+            </label>
+            <textarea
+              id="notif-body"
+              value={body}
+              onChange={(e) => setBody(e.target.value)}
+              placeholder="회원들에게 전달할 내용을 입력하세요."
+              rows={4}
+              maxLength={500}
+              className="w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm resize-none focus:outline-none focus:ring-2 focus:ring-orange-300"
+            />
+            <p className="text-xs text-gray-400 mt-1 text-right">{body.length}/500</p>
+          </div>
+
+          {/* 발송 버튼 */}
+          <div className="flex gap-3">
+            <button
+              type="button"
+              onClick={handleSend}
+              disabled={sending || !title.trim() || !body.trim()}
+              className="flex-1 inline-flex items-center justify-center gap-2 py-3 rounded-xl text-sm font-semibold text-white transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed"
+              style={{ backgroundColor: 'var(--brand)' }}
+            >
+              {sending ? (
+                <>
+                  <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  발송 중...
+                </>
+              ) : (
+                '🔔 발송하기'
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setShowForm(false)}
+              className="px-6 py-3 rounded-xl text-sm font-semibold text-gray-600 border border-gray-200 hover:bg-gray-50 transition-all active:scale-95"
+            >
+              취소
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ── 필터 & 검색 ── */}
       <div className="flex flex-col sm:flex-row gap-3">
         <div className="relative flex-1">
           <span className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400">🔍</span>
@@ -96,7 +290,7 @@ export default function AdminNotificationsPage() {
         </select>
       </div>
 
-      {/* 알림 목록 */}
+      {/* ── 알림 목록 ── */}
       <div className="bg-white rounded-2xl border border-gray-100 overflow-hidden">
         {loading ? (
           <div className="p-8 text-center">
