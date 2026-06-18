@@ -14,13 +14,42 @@ export interface ParsedJob {
 
 type AnySupabase = SupabaseClient
 
-const BOARD_API_URL = 'https://www.vanchosun.com/api/boards'
-const DETAIL_URL =
-  'https://www.vanchosun.com/market/main/frame.php?main=job&boardId=7&bdId='
+const LIST_URL = 'https://www.vanchosun.com/market/main/frame.php'
+const DETAIL_URL = 'https://www.vanchosun.com/market/main/frame.php'
 const AD_KEYWORDS = ['LMIA', 'RCIP', '영주권', '이민', '대행']
 
-function getDetailUrl(bdId: string) {
-  return `${DETAIL_URL}${encodeURIComponent(bdId)}`
+function getListUrl(page: number) {
+  const url = new URL(LIST_URL)
+  url.searchParams.set('cpage1', String(page))
+  url.searchParams.set('main', 'job')
+  return url.toString()
+}
+
+function getDetailUrl(bdId: string, page = 1) {
+  const url = new URL(DETAIL_URL)
+  url.searchParams.set('bdId', bdId)
+  url.searchParams.set('cpage1', String(page))
+  url.searchParams.set('main', 'job')
+  url.searchParams.set('search_location', '')
+  url.searchParams.set('search_title', '')
+  url.searchParams.set('search_type', '')
+  return url.toString()
+}
+
+async function fetchText(url: string) {
+  const response = await fetch(url, {
+    headers: {
+      'user-agent':
+        'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+      accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    },
+  })
+
+  if (!response.ok) {
+    throw new Error(`밴조선 페이지 요청 오류: ${response.status} (${url})`)
+  }
+
+  return response.text()
 }
 
 function normalizeText(value: string) {
@@ -36,43 +65,31 @@ function includesAdKeyword(value: unknown) {
   return AD_KEYWORDS.some((keyword) => text.includes(keyword))
 }
 
-function collectBdIds(value: unknown, result: string[] = []): string[] {
-  if (!value || typeof value !== 'object') return result
-
-  if (Array.isArray(value)) {
-    value.forEach((item) => collectBdIds(item, result))
-    return result
-  }
-
-  const record = value as Record<string, unknown>
-  if (!includesAdKeyword(JSON.stringify(record)) && record.bdId != null) {
-    result.push(String(record.bdId))
-  }
-
-  Object.values(record).forEach((item) => collectBdIds(item, result))
-  return result
-}
-
 export async function fetchBdIds(page: number): Promise<string[]> {
-  const url = `${BOARD_API_URL}?main=job&boardId=7&page=${page}`
-  const response = await fetch(url)
+  const html = await fetchText(getListUrl(page))
+  const $ = cheerio.load(html)
+  const bdIds: string[] = []
 
-  if (!response.ok) {
-    throw new Error(`밴조선 목록 API 오류: ${response.status}`)
-  }
+  $('a[href*="bdId="]').each((_, element) => {
+    const href = $(element).attr('href')
+    const title = normalizeText($(element).text())
 
-  const data = await response.json()
-  return Array.from(new Set(collectBdIds(data)))
+    if (!href || includesAdKeyword(title)) return
+
+    const url = new URL(href, LIST_URL)
+    const bdId = url.searchParams.get('bdId')
+    const main = url.searchParams.get('main')
+
+    if (bdId && main === 'job') {
+      bdIds.push(bdId)
+    }
+  })
+
+  return Array.from(new Set(bdIds))
 }
 
 export async function fetchAndParseDetail(bdId: string): Promise<ParsedJob | null> {
-  const response = await fetch(getDetailUrl(bdId))
-
-  if (!response.ok) {
-    throw new Error(`밴조선 상세 페이지 오류: ${response.status}`)
-  }
-
-  const html = await response.text()
+  const html = await fetchText(getDetailUrl(bdId))
   const $ = cheerio.load(html)
   const fields = new Map<string, string>()
 
