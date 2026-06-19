@@ -312,14 +312,14 @@ export interface Database {
       job_posts: {
         Row: {
           id: string
-          employer_id: string
+          employer_id: string | null
           title: string
           location: string
           category: string
           salary: string
           work_hours: string
           description: string
-          status: 'open' | 'closed'
+          status: 'open' | 'closed' | 'pending_activation'
           require_resume: boolean
           custom_questions: Json
           deadline: string | null
@@ -327,14 +327,14 @@ export interface Database {
         }
         Insert: {
           id?: string
-          employer_id: string
+          employer_id?: string | null
           title: string
           location: string
           category?: string
           salary?: string
           work_hours?: string
           description?: string
-          status?: 'open' | 'closed'
+          status?: 'open' | 'closed' | 'pending_activation'
           require_resume?: boolean
           custom_questions?: Json
           deadline?: string | null
@@ -342,14 +342,14 @@ export interface Database {
         }
         Update: {
           id?: string
-          employer_id?: string
+          employer_id?: string | null
           title?: string
           location?: string
           category?: string
           salary?: string
           work_hours?: string
           description?: string
-          status?: 'open' | 'closed'
+          status?: 'open' | 'closed' | 'pending_activation'
           require_resume?: boolean
           custom_questions?: Json
           deadline?: string | null
