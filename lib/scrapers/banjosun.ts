@@ -20,13 +20,23 @@ const BASE_URL = 'https://www.vanchosun.com'
 const FRAME_URL = `${BASE_URL}/market/main/frame.php`
 const AD_KEYWORDS = ['LMIA', 'RCIP', '영주권', '이민', '대행']
 const REQUEST_HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-  'Referer': 'https://www.vanchosun.com/',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-  'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-  'Connection': 'keep-alive',
-  'Upgrade-Insecure-Requests': '1'
+  'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+  'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/png,image/svg+xml,*/*;q=0.8',
+  'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
+  'accept-encoding': 'gzip, deflate, br',
+  'cache-control': 'no-cache',
+  'pragma': 'no-cache',
+  'referer': 'https://www.vanchosun.com/',
+  'origin': BASE_URL,
+  'connection': 'keep-alive',
+  'sec-fetch-dest': 'document',
+  'sec-fetch-mode': 'navigate',
+  'sec-fetch-site': 'same-origin',
+  'sec-fetch-user': '?1',
+  'upgrade-insecure-requests': '1',
+  'cookie': 'k8rrgvu70ob3kfn21de13rh4e1'
 }
+
 
 
 // [추가] 이메일/전화번호 분리 유틸리티
