@@ -10,6 +10,7 @@ import { Suspense, useEffect, useState } from 'react'
 
 type JobPost = Database['public']['Tables']['job_posts']['Row'] & {
   company_name?: string | null
+  contact_phone?: string | null
 }
 
 function ClaimContent() {
@@ -21,14 +22,21 @@ function ClaimContent() {
   const [loading, setLoading] = useState(true)
   const [step, setStep] = useState<'preview' | 'signup' | 'claiming' | 'done'>('preview')
   const [password, setPassword] = useState('')
+  const [editableName, setEditableName] = useState('')
+  const [editableEmail, setEditableEmail] = useState('')
   const [error, setError] = useState('')
   const [jobError, setJobError] = useState('')
+  const [loginMessage, setLoginMessage] = useState('')
 
-  // 자동 생성될 값들
-  const autoEmail = job
-    ? (job.company_name || 'business').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() + '@hire-van.com'
-    : ''
-  const autoName = job?.company_name || ''
+  // job이 로드되면 자동 생성값 초기화
+  useEffect(() => {
+    if (job) {
+      const name = job.company_name || '업체'
+      const email = name.replace(/[^a-zA-Z0-9]/g, '').toLowerCase() + '@hire-van.com'
+      setEditableName(name)
+      setEditableEmail(email)
+    }
+  }, [job])
 
   // 1) URL의 job_id로 공고 정보를 불러온다 (로그인 불필요)
   useEffect(() => {
@@ -53,17 +61,15 @@ function ClaimContent() {
     fetchJob()
   }, [jobId])
 
-  // 2) 이미 로그인된 상태면 바로 claim 시도
+  // 2) 이미 로그인된 employer면 바로 claim
   useEffect(() => {
     if (!loading && !jobError && user && profile && step === 'preview') {
-      // 이미 employer 계정으로 로그인되어 있으면 바로 claim
       if (profile.role === 'employer') {
         handleClaim()
       }
     }
-  }, [user, profile, loading])
+  }, [user, profile, loading, step, jobError])
 
-  // 3) 버튼 클릭 → 비로그인이면 signup 폼 표시, 로그인 상태면 claim API 호출
   const handleActivateClick = () => {
     if (!user) {
       setStep('signup')
@@ -76,77 +82,91 @@ function ClaimContent() {
     if (!job) return
     setStep('claiming')
     setError('')
-
     try {
       const res = await fetch('/api/auth/employer-claim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          job_id: job.id,
-        }),
+        body: JSON.stringify({ job_id: job.id }),
       })
-
       const data = await res.json()
-
       if (!data.ok) {
         setError(data.message || data.error || '활성화에 실패했습니다.')
         setStep('preview')
         return
       }
-
       setStep('done')
-      // 1초 후 대시보드로 이동
       setTimeout(() => router.push(`/employer/jobs/${job.id}`), 1000)
-    } catch (err) {
-      setError('서버 연결에 실패했습니다. 다시 시도해주세요.')
+    } catch {
+      setError('서버 연결에 실패했습니다.')
       setStep('preview')
     }
   }
 
-  // 4) 3초 가입: 비밀번호만 입력받아 회원가입 + claim
+  // 3) 3초 가입: 비밀번호만 입력 → 계정 생성/기존계정로그인 → claim
   const handleQuickSignup = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!job || password.length < 6) return
     setError('')
+    setLoginMessage('')
     setStep('claiming')
 
     try {
-      // 1) Supabase Auth 회원가입
+      // ── Step A: 기존 계정 확인 (email로 로그인 시도) ──
+      let authUserId: string | undefined
+
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const { data: authData, error: signUpError } = await (supabase.auth as any).signUp({
-        email: autoEmail,
+      const signInResult = await (supabase.auth as any).signInWithPassword({
+        email: editableEmail,
         password,
       })
 
-      if (signUpError || !authData.user) {
-        throw new Error(signUpError?.message || '회원가입에 실패했습니다.')
-      }
+      if (signInResult.data?.user) {
+        // 기존 계정 발견 → 자동 로그인
+        authUserId = signInResult.data.user.id
+        setLoginMessage('이미 계정이 있습니다. 자동으로 로그인합니다.')
+      } else {
+        // ── Step B: 신규 가입 ──
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const signUpResult = await (supabase.auth as any).signUp({
+          email: editableEmail,
+          password,
+        })
 
-      // 2) profiles 테이블에 employer 계정 생성 (service role 경유)
-      const { error: profileError } = await supabase.from('profiles').insert({
-        id: authData.user.id,
+        if (signUpResult.error || !signUpResult.data?.user) {
+          throw new Error(signUpResult.error?.message || '회원가입에 실패했습니다.')
+        }
+        authUserId = signUpResult.data.user.id
+
+        // ── Step C: profiles 생성 (phone 필드 포함!) ──
+      // authUserId는 signIn 또는 signUp으로 반드시 설정되므로 non-null assertion 사용
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { error: profileError } = await (supabase as any).from('profiles').insert({
+        id: authUserId!,
         role: 'employer',
-        name: autoName,
+        name: editableName,
+        phone: job.contact_phone ?? null,
       })
 
-      if (profileError) {
-        throw new Error(profileError.message)
+        if (profileError) {
+          // 이미 profiles가 존재할 수 있으니 무시
+          if (!profileError.message?.includes('duplicate')) {
+            console.warn('[claim] profile insert warning:', profileError.message)
+          }
+        }
       }
 
-      // 3) 프로필 리프레시
+      // ── Step D: 새로고침 후 claim ──
       await refreshProfile()
 
-      // 4) claim API 호출
+      // 세션이 새 user로 갱신될 때까지 잠시 대기
+      await new Promise(r => setTimeout(r, 500))
+
       const res = await fetch('/api/auth/employer-claim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          job_id: job.id,
-        }),
+        body: JSON.stringify({ job_id: job.id }),
       })
-
       const data = await res.json()
-
       if (!data.ok) {
         setError(data.message || data.error || '공고 연결에 실패했습니다.')
         setStep('signup')
@@ -192,7 +212,9 @@ function ClaimContent() {
       <div className="flex justify-center py-20">
         <div className="text-center">
           <div className="w-10 h-10 border-2 border-orange-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
-          <p className="text-gray-600 text-sm">공고를 활성화하는 중...</p>
+          <p className="text-gray-600 text-sm">
+            {loginMessage || '공고를 활성화하는 중...'}
+          </p>
         </div>
       </div>
     )
@@ -225,19 +247,29 @@ function ClaimContent() {
             </p>
           </div>
 
-          {/* 자동 채워진 정보 요약 */}
-          <div className="bg-gray-50 rounded-xl px-4 py-3 mb-5 space-y-2">
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">업체명</span>
-              <span className="font-medium text-gray-800">{autoName || '(정보 없음)'}</span>
+          {/* 자동 채워진 정보 (수정 가능) */}
+          <div className="bg-gray-50 rounded-xl px-4 py-3 mb-5 space-y-3">
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">업체명</label>
+              <input
+                type="text"
+                value={editableName}
+                onChange={e => setEditableName(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+              />
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">이메일</span>
-              <span className="font-medium text-gray-800">{autoEmail}</span>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">이메일</label>
+              <input
+                type="email"
+                value={editableEmail}
+                onChange={e => setEditableEmail(e.target.value)}
+                className="w-full border border-gray-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
+              />
             </div>
-            <div className="flex justify-between text-sm">
-              <span className="text-gray-500">연동될 공고</span>
-              <span className="font-medium text-gray-800">{job.title}</span>
+            <div>
+              <label className="block text-xs font-medium text-gray-500 mb-1">연동될 공고</label>
+              <p className="text-sm font-medium text-gray-800">{job.title}</p>
             </div>
           </div>
 
@@ -258,6 +290,9 @@ function ClaimContent() {
               <p className="text-xs text-gray-400 mt-1">6자 이상의 비밀번호를 입력하세요.</p>
             </div>
 
+            {loginMessage && (
+              <p className="rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-600">{loginMessage}</p>
+            )}
             {error && (
               <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-500">{error}</p>
             )}
@@ -271,7 +306,6 @@ function ClaimContent() {
             </button>
           </form>
 
-          {/* 로그인 링크 */}
           <p className="text-center mt-5 text-sm text-gray-400">
             이미 계정이 있으신가요?{' '}
             <button
