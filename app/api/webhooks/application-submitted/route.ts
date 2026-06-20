@@ -62,13 +62,26 @@ export async function POST(req: Request) {
     const companyName = jobPost.company_name ?? ''
     const claimUrl = `https://hire-van.com/auth/employer-claim?job_id=${jobPost.id}`
 
-    // 1) SMS 발송 (contact_phone)
-    if (jobPost.contact_phone) {
+    // SMS dedupe key — job_post_id 기준 최초 1회만 발송
+    const smsDedupeKey = `sms_sent:${jobPost.id}`
+
+    // 1) 이미 SMS를 발송한 적이 있는지 확인
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: existingSms } = await (supabase as any)
+      .from('notification_logs')
+      .select('id')
+      .eq('dedupe_key', smsDedupeKey)
+      .maybeSingle()
+
+    const alreadySentSms = !!existingSms
+
+    // 2) 최초 1회만 SMS 발송
+    if (jobPost.contact_phone && !alreadySentSms) {
       const smsBody = `[HireVan] "${jobTitle}" 공고에 지원자(${applicantName})가 있습니다. 지금 가입하고 확인하세요: ${claimUrl}`
       await sendSMS({ to: jobPost.contact_phone, body: smsBody })
     }
 
-    // 2) notification_logs 에 이력 저장
+    // 3) notification_logs 에 이력 저장 (SMS 발송 여부와 무관하게 지원 이력은 기록)
     const dedupeKey = `unclaimed_app:${jobPost.id}:${record.seeker_id}`
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     await (supabase as any)
@@ -85,6 +98,7 @@ export async function POST(req: Request) {
           applicant_id: record.seeker_id,
           applicant_name: applicantName,
           deep_link: `/auth/employer-claim?job_id=${jobPost.id}`,
+          sms_already_sent: alreadySentSms,
         },
         dedupe_key: dedupeKey,
         status: 'sent',
@@ -94,8 +108,35 @@ export async function POST(req: Request) {
       .select('id')
       .maybeSingle()
 
-    console.log(`[webhook] 가상 지원 알림: job=${jobPost.id}, seeker=${record.seeker_id}`)
-    return Response.json({ ok: true, claimed: false })
+    // 4) SMS 발송 로그가 없었다면 별도로 기록 (다음 중복 발송 방지)
+    if (!alreadySentSms && jobPost.contact_phone) {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      await (supabase as any)
+        .from('notification_logs')
+        .insert({
+          user_id: '__system__',
+          type: 'new_application_sms',
+          title: `SMS 발송: ${companyName || jobTitle}`,
+          body: `To: ${jobPost.contact_phone} — 지원자 ${applicantName}`,
+          payload: {
+            job_post_id: jobPost.id,
+            contact_phone: jobPost.contact_phone,
+            applicant_id: record.seeker_id,
+          },
+          dedupe_key: smsDedupeKey,
+          status: 'sent',
+          attempts: 1,
+          created_at: new Date().toISOString(),
+        })
+        .select('id')
+        .maybeSingle()
+
+      console.log(`[webhook] SMS 발송 완료 (최초): job=${jobPost.id}, phone=${jobPost.contact_phone}`)
+    } else {
+      console.log(`[webhook] SMS 발송 생략 (중복 방지): job=${jobPost.id}`)
+    }
+
+    return Response.json({ ok: true, claimed: false, sms_sent: !alreadySentSms })
   }
 
   // ──────────────────────────────────────────────────────────────────
