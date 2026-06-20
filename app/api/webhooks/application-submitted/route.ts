@@ -1,6 +1,6 @@
-import type { SupabaseClient } from '@supabase/supabase-js'
-import { requireSupabaseAdmin } from '@/lib/supabase-admin'
 import { sendSMS } from '@/lib/sms'
+import { requireSupabaseAdmin } from '@/lib/supabase-admin'
+import type { SupabaseClient } from '@supabase/supabase-js'
 
 type AnySupabase = SupabaseClient
 
@@ -60,8 +60,8 @@ export async function POST(req: Request) {
     const applicantName = (applicant as { name?: string } | null)?.name ?? '지원자'
     const jobTitle = jobPost.title ?? ''
     const companyName = jobPost.company_name ?? ''
-    const claimUrl = `https://hire-van.com/auth/employer-claim?job_id=${jobPost.id}`
-
+    const claimUrl = `https://hire-van.com/auth/claim?job_id=${jobPost.id}`
+    
     // SMS dedupe key — job_post_id 기준 최초 1회만 발송
     const smsDedupeKey = `sms_sent:${jobPost.id}`
 
