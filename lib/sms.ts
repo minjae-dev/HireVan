@@ -1,4 +1,3 @@
-import twilio from 'twilio';
 /**
  * lib/sms.ts
  *
@@ -26,10 +25,13 @@ export async function sendSMS(input: {
     return { ok: false }
   }
 
-  const client = twilio(
-      process.env.TWILIO_ACCOUNT_SID,
-      process.env.TWILIO_AUTH_TOKEN
-    );
+  // @ts-expect-error - twilio is installed at runtime on the server
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const twilioMod: any = await import('twilio')
+  const client = twilioMod.default(
+    process.env.TWILIO_ACCOUNT_SID,
+    process.env.TWILIO_AUTH_TOKEN,
+  )
 
   // 캐나다 번호에 +1 prefix 자동 추가
   const normalized = to.startsWith('+') ? to : `+1${to.replace(/[^0-9]/g, '')}`

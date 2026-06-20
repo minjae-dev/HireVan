@@ -1,14 +1,16 @@
 'use client'
 
 import { useLanguage } from '@/context/LanguageContext'
-import { useEffect, useState } from 'react'
+import { Suspense, useEffect, useState } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 
-export default function LoginPage() {
+function LoginContent() {
   const router = useRouter()
+  const searchParams = useSearchParams()
+  const redirectTo = searchParams.get('redirect') || ''
   const { user, profile, loading } = useAuth()
   const { t } = useLanguage()
   const [email, setEmail] = useState('')
@@ -17,6 +19,7 @@ export default function LoginPage() {
   const [submitting, setSubmitting] = useState(false)
 
   const dashboardFor = (role: 'seeker' | 'employer' | null | undefined) => {
+    if (redirectTo) return redirectTo
     if (role === 'employer') return '/employer/dashboard'
     if (role === 'seeker') return '/seeker/dashboard'
     return '/'
@@ -111,5 +114,13 @@ export default function LoginPage() {
         </p>
       </div>
     </div>
+  )
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense fallback={<div className="flex justify-center py-20"><div className="w-8 h-8 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" /></div>}>
+      <LoginContent />
+    </Suspense>
   )
 }
