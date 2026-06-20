@@ -15,15 +15,22 @@ type JobPost = Database['public']['Tables']['job_posts']['Row'] & {
 function ClaimContent() {
   const searchParams = useSearchParams()
   const jobId = searchParams.get('job_id')
-  const { profile, user } = useAuth()
+  const { profile, user, refreshProfile } = useAuth()
   const router = useRouter()
   const [job, setJob] = useState<JobPost | null>(null)
   const [loading, setLoading] = useState(true)
-  const [claiming, setClaiming] = useState(false)
+  const [step, setStep] = useState<'preview' | 'signup' | 'claiming' | 'done'>('preview')
+  const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [jobError, setJobError] = useState('')
 
-  // 1) URL의 job_id로 공고 정보를 불러온다 (로그인 여부와 무관하게 먼저 실행)
+  // 자동 생성될 값들
+  const autoEmail = job
+    ? (job.company_name || 'business').replace(/[^a-zA-Z0-9]/g, '').toLowerCase() + '@hire-van.com'
+    : ''
+  const autoName = job?.company_name || ''
+
+  // 1) URL의 job_id로 공고 정보를 불러온다 (로그인 불필요)
   useEffect(() => {
     if (!jobId) {
       setJobError('공고 ID가 없습니다. 링크를 다시 확인해주세요.')
@@ -46,17 +53,28 @@ function ClaimContent() {
     fetchJob()
   }, [jobId])
 
-  // 2) 버튼 클릭 핸들러 — 로그인 상태에 따라 분기
-  const handleClaim = async () => {
-    // 비로그인 상태 → 로그인 페이지로 이동 (job_id 유지)
+  // 2) 이미 로그인된 상태면 바로 claim 시도
+  useEffect(() => {
+    if (!loading && !jobError && user && profile && step === 'preview') {
+      // 이미 employer 계정으로 로그인되어 있으면 바로 claim
+      if (profile.role === 'employer') {
+        handleClaim()
+      }
+    }
+  }, [user, profile, loading])
+
+  // 3) 버튼 클릭 → 비로그인이면 signup 폼 표시, 로그인 상태면 claim API 호출
+  const handleActivateClick = () => {
     if (!user) {
-      router.push(`/login?redirect=/auth/claim?job_id=${jobId}`)
+      setStep('signup')
       return
     }
+    handleClaim()
+  }
 
-    // 로그인 상태 → claim API 호출
+  const handleClaim = async () => {
     if (!job) return
-    setClaiming(true)
+    setStep('claiming')
     setError('')
 
     try {
@@ -64,30 +82,83 @@ function ClaimContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          phone: profile?.name, // fallback — 실제로는 signup 시 입력한 phone 사용
           job_id: job.id,
         }),
       })
 
       const data = await res.json()
 
-      if (data.step === 'signup_required') {
-        setError('해당 번호로 등록된 공고를 찾을 수 없습니다. 고객센터로 문의해주세요.')
-        setClaiming(false)
-        return
-      }
-
       if (!data.ok) {
         setError(data.message || data.error || '활성화에 실패했습니다.')
-        setClaiming(false)
+        setStep('preview')
         return
       }
 
-      // 성공 → 해당 공고의 employer 대시보드로 이동
-      router.push(`/employer/jobs/${job.id}`)
+      setStep('done')
+      // 1초 후 대시보드로 이동
+      setTimeout(() => router.push(`/employer/jobs/${job.id}`), 1000)
     } catch (err) {
       setError('서버 연결에 실패했습니다. 다시 시도해주세요.')
-      setClaiming(false)
+      setStep('preview')
+    }
+  }
+
+  // 4) 3초 가입: 비밀번호만 입력받아 회원가입 + claim
+  const handleQuickSignup = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!job || password.length < 6) return
+    setError('')
+    setStep('claiming')
+
+    try {
+      // 1) Supabase Auth 회원가입
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: authData, error: signUpError } = await (supabase.auth as any).signUp({
+        email: autoEmail,
+        password,
+      })
+
+      if (signUpError || !authData.user) {
+        throw new Error(signUpError?.message || '회원가입에 실패했습니다.')
+      }
+
+      // 2) profiles 테이블에 employer 계정 생성 (service role 경유)
+      const { error: profileError } = await supabase.from('profiles').insert({
+        id: authData.user.id,
+        role: 'employer',
+        name: autoName,
+      })
+
+      if (profileError) {
+        throw new Error(profileError.message)
+      }
+
+      // 3) 프로필 리프레시
+      await refreshProfile()
+
+      // 4) claim API 호출
+      const res = await fetch('/api/auth/employer-claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          job_id: job.id,
+        }),
+      })
+
+      const data = await res.json()
+
+      if (!data.ok) {
+        setError(data.message || data.error || '공고 연결에 실패했습니다.')
+        setStep('signup')
+        return
+      }
+
+      setStep('done')
+      setTimeout(() => router.push(`/employer/jobs/${job.id}`), 1000)
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '처리 중 오류가 발생했습니다.'
+      setError(msg)
+      setStep('signup')
     }
   }
 
@@ -115,7 +186,107 @@ function ClaimContent() {
 
   if (!job) return null
 
-  // ── 공고 미리보기 + 활성화 ──
+  // ── 가입/처리 중 ──
+  if (step === 'claiming') {
+    return (
+      <div className="flex justify-center py-20">
+        <div className="text-center">
+          <div className="w-10 h-10 border-2 border-orange-400 border-t-transparent rounded-full animate-spin mx-auto mb-4" />
+          <p className="text-gray-600 text-sm">공고를 활성화하는 중...</p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── 완료 ──
+  if (step === 'done') {
+    return (
+      <div className="max-w-md mx-auto mt-20 px-4 text-center">
+        <p className="text-5xl mb-4">🎉</p>
+        <h2 className="text-xl font-bold text-gray-900 mb-2">공고가 활성화되었습니다!</h2>
+        <p className="text-sm text-gray-500">잠시 후 대시보드로 이동합니다.</p>
+      </div>
+    )
+  }
+
+  // ── 3초 가입 폼 ──
+  if (step === 'signup') {
+    return (
+      <div className="max-w-lg mx-auto mt-8 px-4 pb-16">
+        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
+          {/* 안내 문구 */}
+          <div className="text-center mb-6">
+            <p className="text-3xl mb-1">🚀</p>
+            <h1 className="text-lg font-bold text-gray-900">3초 만에 가입하고 시작하기</h1>
+            <p className="text-sm text-gray-500 mt-2 leading-relaxed">
+              사장님! 이미 등록된 공고 정보로 <strong>3초 만에 가입</strong>하세요.
+              <br />
+              비밀번호만 설정하면 바로 지원자 관리가 가능합니다.
+            </p>
+          </div>
+
+          {/* 자동 채워진 정보 요약 */}
+          <div className="bg-gray-50 rounded-xl px-4 py-3 mb-5 space-y-2">
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">업체명</span>
+              <span className="font-medium text-gray-800">{autoName || '(정보 없음)'}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">이메일</span>
+              <span className="font-medium text-gray-800">{autoEmail}</span>
+            </div>
+            <div className="flex justify-between text-sm">
+              <span className="text-gray-500">연동될 공고</span>
+              <span className="font-medium text-gray-800">{job.title}</span>
+            </div>
+          </div>
+
+          <form onSubmit={handleQuickSignup} className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                비밀번호 설정 <span className="text-red-500">*</span>
+              </label>
+              <input
+                type="password"
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="6자 이상 입력해주세요"
+                required
+                minLength={6}
+                className="w-full border border-gray-200 rounded-xl px-4 py-3.5 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300 focus:border-transparent"
+              />
+              <p className="text-xs text-gray-400 mt-1">6자 이상의 비밀번호를 입력하세요.</p>
+            </div>
+
+            {error && (
+              <p className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-500">{error}</p>
+            )}
+
+            <button
+              type="submit"
+              disabled={password.length < 6}
+              className="w-full rounded-2xl bg-orange-500 text-white py-4 font-bold text-base hover:bg-orange-600 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
+            >
+              3초 만에 가입하고 지원자 확인하기
+            </button>
+          </form>
+
+          {/* 로그인 링크 */}
+          <p className="text-center mt-5 text-sm text-gray-400">
+            이미 계정이 있으신가요?{' '}
+            <button
+              onClick={() => router.push(`/login?redirect=/auth/claim?job_id=${jobId}`)}
+              className="text-orange-500 font-medium hover:underline"
+            >
+              로그인
+            </button>
+          </p>
+        </div>
+      </div>
+    )
+  }
+
+  // ── 공고 미리보기 (기본 step: preview) ──
   return (
     <div className="max-w-lg mx-auto mt-8 px-4 pb-16">
       {/* 페이지 타이틀 */}
@@ -129,7 +300,6 @@ function ClaimContent() {
 
       {/* ── 공고 카드 (미리보기) ── */}
       <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm mb-5">
-        {/* 헤더: 제목 + 상태 */}
         <div className="flex items-start justify-between gap-3 mb-3">
           <div className="flex-1 min-w-0">
             <h2 className="font-bold text-gray-900 text-lg leading-snug">{job.title}</h2>
@@ -142,7 +312,6 @@ function ClaimContent() {
           </span>
         </div>
 
-        {/* 태그: 위치 · 급여 · 근무시간 */}
         <div className="flex flex-wrap gap-2 mb-3">
           {job.location && (
             <span className="inline-flex items-center gap-1 text-xs text-gray-600 bg-gray-50 border border-gray-100 rounded-full px-2.5 py-1.5">
@@ -164,14 +333,12 @@ function ClaimContent() {
           )}
         </div>
 
-        {/* 상세 내용 (최대 3줄) */}
         {job.description && (
           <p className="text-sm text-gray-600 leading-relaxed line-clamp-3 mb-2">
             {job.description}
           </p>
         )}
 
-        {/* 등록일 */}
         <p className="text-xs text-gray-400">
           {new Date(job.created_at).toLocaleDateString('ko-KR')} 등록
         </p>
@@ -182,34 +349,22 @@ function ClaimContent() {
         <p className="text-xs text-orange-700 leading-relaxed">
           <strong>✔️ 이 공고는 한인마트에서 크롤링된 공고입니다.</strong>
           <br />
-          버튼을 누르면 이 공고가 내 계정에 등록되고, 지원자 확인 및 채팅이 가능해집니다.
+          아래 버튼을 누르면 이 공고가 내 계정에 등록되고, 지원자 확인 및 채팅이 가능해집니다.
         </p>
       </div>
 
-      {/* 에러 메시지 */}
       {error && (
         <p className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-500">{error}</p>
       )}
 
       {/* ── 활성화 버튼 ── */}
       <button
-        onClick={handleClaim}
-        disabled={claiming}
-        className="w-full rounded-2xl bg-orange-500 text-white py-4 font-bold text-base hover:bg-orange-600 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
+        onClick={handleActivateClick}
+        className="w-full rounded-2xl bg-orange-500 text-white py-4 font-bold text-base hover:bg-orange-600 active:scale-[0.98] transition-all shadow-sm"
       >
-        {claiming ? (
-          <span className="inline-flex items-center gap-2">
-            <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-            처리 중...
-          </span>
-        ) : user ? (
-          '내 공고 지원자 확인하고 시작하기'
-        ) : (
-          '로그인하고 공고 활성화하기'
-        )}
+        {user ? '내 공고 지원자 확인하고 시작하기' : '3초 만에 가입하고 지원자 확인하기'}
       </button>
 
-      {/* 푸터 링크 */}
       <p className="text-center mt-6 text-xs text-gray-400">
         도움이 필요하시면{' '}
         <a href="mailto:support@hire-van.com" className="text-orange-500 underline">
