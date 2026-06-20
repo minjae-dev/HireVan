@@ -1,74 +1,96 @@
 'use client'
 
 import { useAuth } from '@/lib/auth-context'
+import { supabase } from '@/lib/supabase'
+import type { Database } from '@/lib/database.types'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useState } from 'react'
+
+type JobPost = Database['public']['Tables']['job_posts']['Row'] & {
+  company_name?: string | null
+}
 
 function ClaimContent() {
   const searchParams = useSearchParams()
   const jobId = searchParams.get('job_id')
   const { profile, user } = useAuth()
   const router = useRouter()
-  const [step, setStep] = useState<'loading' | 'phone' | 'claiming' | 'done' | 'error'>('loading')
-  const [phone, setPhone] = useState('')
-  const [message, setMessage] = useState('')
+  const [job, setJob] = useState<JobPost | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [claiming, setClaiming] = useState(false)
   const [error, setError] = useState('')
+  const [jobError, setJobError] = useState('')
 
+  // 1) URL의 job_id로 공고 정보를 불러온다
   useEffect(() => {
-    // 이미 로그인되어 있으면 phone 입력 단계로
-    if (user && profile) {
-      if (profile.role !== 'employer') {
-        setError('채용자(employer) 계정으로 로그인해주세요.')
-        setStep('error')
-        return
+    if (!jobId) {
+      setJobError('공고 ID가 없습니다. 링크를 다시 확인해주세요.')
+      setLoading(false)
+      return
+    }
+    const fetchJob = async () => {
+      const { data } = await supabase
+        .from('job_posts')
+        .select('*')
+        .eq('id', jobId)
+        .maybeSingle()
+      if (!data) {
+        setJobError('공고를 찾을 수 없습니다.')
+      } else {
+        setJob(data as unknown as JobPost)
       }
-      setStep('phone')
-    } else if (user === null) {
-      // 로그인 안 됨 → 로그인 페이지로 리다이렉트 (job_id 유지)
+      setLoading(false)
+    }
+    fetchJob()
+  }, [jobId])
+
+  // 2) 로그인 체크
+  useEffect(() => {
+    if (loading) return
+    if (user === null && jobId) {
       router.push(`/login?redirect=/auth/claim?job_id=${jobId}`)
     }
-    // user가 undefined(로딩 중)이면 아무것도 안 함
-  }, [user, profile, router, jobId])
+  }, [user, loading, router, jobId])
 
   const handleClaim = async () => {
-    if (!phone.trim()) return
-    setStep('claiming')
+    if (!job || !user || !profile) return
+    setClaiming(true)
     setError('')
-    setMessage('')
 
     try {
       const res = await fetch('/api/auth/employer-claim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          phone: phone.replace(/[^0-9]/g, ''),
-          job_id: jobId || undefined,
+          phone: profile.name, // fallback — 실제로는 signup 시 입력한 phone 사용
+          job_id: job.id,
         }),
       })
 
       const data = await res.json()
 
       if (data.step === 'signup_required') {
-        setMessage(data.message)
-        setStep('phone')
+        setError('해당 번호로 등록된 공고를 찾을 수 없습니다. 고객센터로 문의해주세요.')
+        setClaiming(false)
         return
       }
 
       if (!data.ok) {
         setError(data.message || data.error || '활성화에 실패했습니다.')
-        setStep('phone')
+        setClaiming(false)
         return
       }
 
-      setStep('done')
-      setMessage(`${data.activated_count}개의 공고가 활성화되었습니다!`)
+      // 성공 → 해당 공고의 employer 대시보드로 이동
+      router.push(`/employer/jobs/${job.id}`)
     } catch (err) {
-      setError('서버 연결에 실패했습니다.')
-      setStep('phone')
+      setError('서버 연결에 실패했습니다. 다시 시도해주세요.')
+      setClaiming(false)
     }
   }
 
-  if (step === 'loading') {
+  // ── 로딩 중 ──
+  if (loading) {
     return (
       <div className="flex justify-center py-20">
         <div className="w-8 h-8 border-2 border-orange-400 border-t-transparent rounded-full animate-spin" />
@@ -76,94 +98,72 @@ function ClaimContent() {
     )
   }
 
-  if (step === 'error') {
+  // ── 공고 로딩 실패 ──
+  if (jobError) {
     return (
-      <div className="max-w-md mx-auto mt-20 p-6">
-        <div className="text-center py-10">
+      <div className="max-w-md mx-auto mt-20 px-4">
+        <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm text-center">
           <p className="text-4xl mb-4">😕</p>
-          <p className="text-gray-600 mb-4">{error}</p>
-          <button
-            onClick={() => router.push('/login')}
-            className="rounded-xl bg-orange-500 text-white px-6 py-3 font-medium"
-          >
-            로그인하기
-          </button>
+          <p className="text-gray-600 mb-2">{jobError}</p>
+          <p className="text-sm text-gray-400">SMS에 포함된 링크를 정확히 클릭했는지 확인해주세요.</p>
         </div>
       </div>
     )
   }
 
+  if (!job) return null
+
+  // ── 공고 미리보기 + 활성화 ──
   return (
-    <div className="max-w-md mx-auto mt-12 px-4">
-      <div className="bg-white rounded-2xl border border-gray-100 p-6 shadow-sm">
-        <div className="text-center mb-6">
-          <p className="text-4xl mb-2">🏪</p>
-          <h1 className="text-xl font-bold text-gray-900">사장님 계정 활성화</h1>
-          <p className="text-sm text-gray-500 mt-1">
-            크롤링된 공고를 내 계정으로 가져옵니다
-          </p>
-          {jobId && (
-            <p className="text-xs text-gray-400 mt-2">
-              공고 ID: <code className="bg-gray-100 px-1.5 py-0.5 rounded">{jobId}</code>
+    <div className="max-w-lg mx-auto mt-8 px-4 pb-16">
+      {/* 페이지 타이틀 */}
+      <div className="text-center mb-6">
+        <p className="text-3xl mb-1">📋</p>
+        <h1 className="text-xl font-bold text-gray-900">공고를 확인하고 활성화하세요</h1>
+        <p className="text-sm text-gray-500 mt-1">
+          한인마트에 올리신 공고입니다. 계정과 연동하여 지원자를 관리하세요.
+        </p>
+      </div>
+
+      {/* ── 공고 카드 (미리보기) ── */}
+      <div className="bg-white rounded-2xl border border-gray-100 p-5 shadow-sm mb-5">
+        {/* 헤더: 제목 + 상태 */}
+        <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex-1 min-w-0">
+            <h2 className="font-bold text-gray-900 text-lg leading-snug">{job.title}</h2>
+            <p className="text-sm text-gray-500 mt-0.5">
+              {job.company_name ?? '업체명 미등록'}
             </p>
+          </div>
+          <span className="flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 text-green-700">
+            모집중
+          </span>
+        </div>
+
+        {/* 태그: 위치 · 급여 · 근무시간 */}
+        <div className="flex flex-wrap gap-2 mb-3">
+          {job.location && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-600 bg-gray-50 border border-gray-100 rounded-full px-2.5 py-1.5">
+              <span>📍</span>
+              <span>{job.location}</span>
+            </span>
+          )}
+          {job.salary && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-600 bg-gray-50 border border-gray-100 rounded-full px-2.5 py-1.5">
+              <span>💰</span>
+              <span>{job.salary}</span>
+            </span>
+          )}
+          {job.work_hours && (
+            <span className="inline-flex items-center gap-1 text-xs text-gray-600 bg-gray-50 border border-gray-100 rounded-full px-2.5 py-1.5">
+              <span>🕐</span>
+              <span>{job.work_hours}</span>
+            </span>
           )}
         </div>
 
-        {step === 'done' ? (
-          <div className="text-center py-6">
-            <p className="text-4xl mb-3">🎉</p>
-            <p className="text-gray-800 font-medium mb-2">{message}</p>
-            <p className="text-sm text-gray-500 mb-6">
-              대시보드에서 지원자를 확인하고 채팅을 시작하세요.
-            </p>
-            <button
-              onClick={() => router.push('/employer/dashboard')}
-              className="w-full rounded-2xl bg-orange-500 text-white py-4 font-bold hover:bg-orange-600 active:scale-95 transition-all"
-            >
-              대시보드로 이동
-            </button>
-          </div>
-        ) : (
-          <>
-            <div className="mb-4">
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                공고에 등록된 전화번호
-              </label>
-              <input
-                type="tel"
-                value={phone}
-                onChange={(e) => setPhone(e.target.value)}
-                placeholder="예: 6041234567"
-                className="w-full border border-gray-200 rounded-xl px-4 py-3 text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
-                disabled={step === 'claiming'}
-              />
-              <p className="text-xs text-gray-400 mt-1.5">
-                한인마트 게시판에 등록한 연락처와 동일한 번호를 입력하세요.
-              </p>
-            </div>
-
-            {message && (
-              <p className="mb-3 rounded-xl bg-blue-50 px-4 py-3 text-sm text-blue-600">{message}</p>
-            )}
-            {error && (
-              <p className="mb-3 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-500">{error}</p>
-            )}
-
-            <button
-              onClick={handleClaim}
-              disabled={step === 'claiming' || !phone.trim()}
-              className={`w-full rounded-2xl py-4 font-bold transition-all active:scale-95 ${
-                step === 'claiming' || !phone.trim()
-                  ? 'bg-gray-200 text-gray-400 cursor-not-allowed'
-                  : 'bg-orange-500 text-white hover:bg-orange-600'
-              }`}
-            >
-              {step === 'claiming' ? '처리 중...' : '사장님 계정 활성화하기'}
-            </button>
-          </>
-        )}
-      </div>
-    </div>
+        {/* 상세 내용 (최대 3줄) */}
+        {job.description && (
   )
 }
 

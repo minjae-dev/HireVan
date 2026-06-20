@@ -46,9 +46,9 @@ export async function POST(request: NextRequest) {
 
   // 2) 전화번호 정규화 (+1 prefix 제거 등)
   const normalizedPhone = phone.replace(/[^0-9]/g, '')
-  if (normalizedPhone.length < 10) {
-    return NextResponse.json({ error: 'invalid_phone' }, { status: 400 })
-  }
+  // if (normalizedPhone.length < 10) {
+  //   return NextResponse.json({ error: 'invalid_phone' }, { status: 400 })
+  // }
 
   // 3) 해당 전화번호로 이미 가입된 employer 계정이 있는지 확인
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
