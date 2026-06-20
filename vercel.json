@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/banjosun",
-      "schedule": "10 19 * * *"
+      "schedule": "20 19 * * *"
     }
   ],
   "regions": ["iad1"]
