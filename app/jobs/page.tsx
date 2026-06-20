@@ -2,15 +2,16 @@
 
 /* eslint-disable react-hooks/set-state-in-effect */
 
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import Link from 'next/link'
-import { supabase } from '@/lib/supabase'
-import { useAuth } from '@/lib/auth-context'
 import { useLanguage } from '@/context/LanguageContext'
+import { useAuth } from '@/lib/auth-context'
 import type { Database } from '@/lib/database.types'
+import { supabase } from '@/lib/supabase'
+import Link from 'next/link'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 
 type JobPost = Database['public']['Tables']['job_posts']['Row'] & {
-  profiles: { name: string; role: string } | null
+  profiles?: { name: string; role: string } | null
+  company_name?: string | null
 }
 
 const LOCATIONS = ['전체', '다운타운', '버나비', '서리', '코퀴틀람', '리치몬드', '노스밴쿠버', '기타']
@@ -29,12 +30,15 @@ export default function JobsPage() {
 
   const fetchJobs = useCallback(async () => {
     setLoading(true)
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('job_posts')
-      .select('*, profiles(name, role)')
-      .eq('status', 'open')
+      .select('*')
+      .in('status', ['open', 'pending_activation'])
       .order('created_at', { ascending: false })
 
+    if (error) console.error("데이터 가져오기 오류:", error);
+    console.log("불러온 전체 데이터 수:", data?.length); // 디버깅용
+    
     setJobs((data as unknown as JobPost[]) ?? [])
     setLoading(false)
   }, [])
@@ -208,7 +212,7 @@ function JobCard({
         <div className="flex items-start justify-between gap-3 mb-2">
           <div className="flex-1 min-w-0">
             <h2 className="font-semibold text-gray-900 text-base truncate">{job.title}</h2>
-            <p className="text-sm text-gray-500">{job.profiles?.name ?? t('jobs.employer_name_fallback')}</p>
+            <p className="text-sm text-gray-500">{job.company_name ?? (job.profiles?.name || t('jobs.employer_name_fallback'))}</p>
           </div>
           {isSeeker && applied && (
             <span className="flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full bg-green-100 text-green-700 whitespace-nowrap">

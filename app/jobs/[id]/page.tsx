@@ -19,7 +19,8 @@ type CustomAnswer = {
 }
 
 type JobPost = Database['public']['Tables']['job_posts']['Row'] & {
-  profiles: { name: string; bio: string } | null
+  profiles?: { name: string; bio: string } | null
+  company_name?: string | null
 }
 
 type Application = Database['public']['Tables']['applications']['Row'] & {
@@ -417,14 +418,14 @@ export default function JobDetailPage() {
           <h1 className="text-xl font-bold text-gray-900 leading-snug">{job.title}</h1>
           <span
             className={`flex-shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${
-              job.status === 'open' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
+              job.status === 'open' || job.status === 'pending_activation' ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'
             }`}
           >
-            {job.status === 'open' ? '모집중' : '마감'}
+            {job.status === 'open' || job.status === 'pending_activation' ? '모집중' : '마감'}
           </span>
         </div>
 
-        <p className="text-sm text-gray-500 font-medium mb-4">{job.profiles?.name ?? '업체'}</p>
+        <p className="text-sm text-gray-500 font-medium mb-4">{job.company_name ?? job.profiles?.name ?? '업체'}</p>
 
         <div className="flex flex-wrap gap-2 mb-5">
           {job.location && <InfoChip icon="📍" text={job.location} />}
@@ -462,7 +463,7 @@ export default function JobDetailPage() {
       </div>
 
       {/* Seeker: Apply section */}
-      {isSeeker && job.status === 'open' && (
+      {isSeeker && (job.status === 'open' || job.status === 'pending_activation') && (
         <div className="mb-4">
           {cannotApplyBecauseResume && (
             <div className="mb-3 rounded-2xl border border-orange-100 bg-orange-50 px-4 py-3">

@@ -11,7 +11,7 @@ import { safeString, parseQuestions } from '@/lib/safe'
 
 export type JobPostRow = Database['public']['Tables']['job_posts']['Row']
 
-export type JobStatus = 'open' | 'closed'
+export type JobStatus = 'open' | 'closed' | 'pending_activation'
 
 export interface JobPostWithAuthor extends JobPostRow {
   profiles: { name: string; role: string } | null

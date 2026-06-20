@@ -10,7 +10,7 @@ type Job = {
   location: string
   category: string
   salary: string
-  status: 'open' | 'closed'
+  status: 'open' | 'closed' | 'pending_activation'
   employer_id: string
   created_at: string
 }
@@ -19,7 +19,7 @@ export default function AdminJobsPage() {
   const [jobs, setJobs] = useState<Job[]>([])
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
-  const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'closed'>('all')
+  const [filterStatus, setFilterStatus] = useState<'all' | 'open' | 'closed' | 'pending_activation'>('all')
   const [actionLoading, setActionLoading] = useState<string | null>(null)
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
@@ -108,11 +108,12 @@ export default function AdminJobsPage() {
         </div>
         <select
           value={filterStatus}
-          onChange={(e) => setFilterStatus(e.target.value as 'all' | 'open' | 'closed')}
+          onChange={(e) => setFilterStatus(e.target.value as 'all' | 'open' | 'closed' | 'pending_activation')}
           className="px-4 py-2.5 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-orange-300"
         >
           <option value="all">전체 상태</option>
           <option value="open">활성</option>
+          <option value="pending_activation">대기 활성화</option>
           <option value="closed">마감</option>
         </select>
       </div>
@@ -164,7 +165,7 @@ export default function AdminJobsPage() {
                             : 'bg-gray-100 text-gray-500'
                         }`}
                       >
-                        {job.status === 'open' ? '활성' : '마감'}
+                        {job.status === 'open' || job.status === 'pending_activation' ? '활성' : '마감'}
                       </span>
                     </td>
                     <td className="py-3 px-4 text-gray-500">

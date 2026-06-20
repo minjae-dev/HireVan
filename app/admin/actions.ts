@@ -99,7 +99,7 @@ export async function updateUserRole(userId: string, role: 'employer' | 'seeker'
   }
 }
 
-export async function updateJobStatus(jobId: string, status: 'open' | 'closed') {
+export async function updateJobStatus(jobId: string, status: 'open' | 'closed' | 'pending_activation') {
   try {
     await requireAdmin()
     const adminClient = requireSupabaseAdmin()
