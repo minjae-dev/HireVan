@@ -9,7 +9,7 @@ async function main() {
 
   console.log('🚀 크롤링 시작...')
   try {
-    const result = await runPipeline(2)
+    const result = await runPipeline(2) as any;
     console.log(`완료: 삽입=${result.inserted}, 스킵=${result.skipped}, 오류=${result.errors}`)
   } catch (error) {
     const message = error instanceof Error ? error.message : JSON.stringify(error)
