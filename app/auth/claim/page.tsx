@@ -1,8 +1,10 @@
 'use client'
 
+/* eslint-disable react-hooks/set-state-in-effect */
+
 import { useAuth } from '@/lib/auth-context'
-import { supabase } from '@/lib/supabase'
 import type { Database } from '@/lib/database.types'
+import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useState } from 'react'
 
@@ -164,6 +166,56 @@ function ClaimContent() {
 
         {/* 상세 내용 (최대 3줄) */}
         {job.description && (
+          <p className="text-sm text-gray-600 leading-relaxed line-clamp-3 mb-2">
+            {job.description}
+          </p>
+        )}
+
+        {/* 등록일 */}
+        <p className="text-xs text-gray-400">
+          {new Date(job.created_at).toLocaleDateString('ko-KR')} 등록
+        </p>
+      </div>
+
+      {/* ── 설명 문구 ── */}
+      <div className="bg-orange-50 border border-orange-100 rounded-xl px-4 py-3 mb-5">
+        <p className="text-xs text-orange-700 leading-relaxed">
+          <strong>✔️ 이 공고는 한인마트에서 크롤링된 공고입니다.</strong>
+          <br />
+          버튼을 누르면 이 공고가 내 계정에 등록되고, 지원자 확인 및 채팅이 가능해집니다.
+        </p>
+      </div>
+
+      {/* 에러 메시지 */}
+      {error && (
+        <p className="mb-4 rounded-xl bg-red-50 px-4 py-3 text-sm text-red-500">{error}</p>
+      )}
+
+      {/* ── 활성화 버튼 ── */}
+      <button
+        onClick={handleClaim}
+        disabled={claiming}
+        className="w-full rounded-2xl bg-orange-500 text-white py-4 font-bold text-base hover:bg-orange-600 active:scale-[0.98] transition-all disabled:opacity-60 disabled:cursor-not-allowed shadow-sm"
+      >
+        {claiming ? (
+          <span className="inline-flex items-center gap-2">
+            <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+            처리 중...
+          </span>
+        ) : (
+          '내 공고 지원자 확인하고 시작하기'
+        )}
+      </button>
+
+      {/* 푸터 링크 */}
+      <p className="text-center mt-6 text-xs text-gray-400">
+        도움이 필요하시면{' '}
+        <a href="mailto:support@hire-van.com" className="text-orange-500 underline">
+          support@hire-van.com
+        </a>
+        으로 문의해주세요.
+      </p>
+    </div>
   )
 }
 
