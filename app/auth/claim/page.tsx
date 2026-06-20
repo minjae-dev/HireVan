@@ -5,6 +5,7 @@
 import { useAuth } from '@/lib/auth-context'
 import type { Database } from '@/lib/database.types'
 import { supabase } from '@/lib/supabase'
+import { syncEmployerJobs } from '@/lib/employerJobs'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useState } from 'react'
 
@@ -86,7 +87,10 @@ function ClaimContent() {
       const res = await fetch('/api/auth/employer-claim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ job_id: job.id }),
+        body: JSON.stringify({
+          job_id: job.id,
+          phone: job.contact_phone, // ← API가 profile을 찾기 위해 필수
+        }),
       })
       const data = await res.json()
       if (!data.ok) {
@@ -121,9 +125,12 @@ function ClaimContent() {
       })
 
       if (signInResult.data?.user) {
-        // 기존 계정 발견 → 자동 로그인
+        // 기존 계정 발견 → 자동 로그인 + 공고 매칭
         authUserId = signInResult.data.user.id
         setLoginMessage('이미 계정이 있습니다. 자동으로 로그인합니다.')
+        // 기존 유저도 공고와 연결되어 있을 수 있음 → 강제 sync
+        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+        await syncEmployerJobs(authUserId!, job.contact_phone)
       } else {
         // ── Step B: 신규 가입 ──
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -155,7 +162,12 @@ function ClaimContent() {
         }
       }
 
-      // ── Step D: 새로고침 후 claim ──
+      // ── Step D: 공고-계정 강제 매칭 (회원가입 직후)
+      //    signUp으로 생성된 새 계정의 authUserId로 연결
+      //    employer-claim API가 처리하지만, 여기서도 사전 sync 수행
+      await syncEmployerJobs(authUserId!, job.contact_phone)
+
+      // ── Step E: 프로필 리프레시
       await refreshProfile()
 
       // 세션이 새 user로 갱신될 때까지 잠시 대기
@@ -164,7 +176,10 @@ function ClaimContent() {
       const res = await fetch('/api/auth/employer-claim', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ job_id: job.id }),
+        body: JSON.stringify({
+          job_id: job.id,
+          phone: job.contact_phone, // ← API가 profile을 찾기 위해 필수
+        }),
       })
       const data = await res.json()
       if (!data.ok) {

@@ -3,6 +3,7 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
+import { syncEmployerJobs } from '@/lib/employerJobs'
 import type { Database } from '@/lib/database.types'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -61,6 +62,16 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (session?.user) {
         ;(async () => {
           await fetchProfile(session.user.id)
+          // employer 로그인 시 보류 중인 공고 자동 매칭
+          const profileRow = (await supabase
+            .from('profiles')
+            .select('phone, role')
+            .eq('id', session.user.id)
+            .maybeSingle()) as { data: { phone: string | null; role: string } | null }
+
+          if (profileRow.data?.role === 'employer' && profileRow.data?.phone) {
+            await syncEmployerJobs(session.user.id, profileRow.data.phone)
+          }
         })()
       } else {
         setProfile(null)
