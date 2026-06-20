@@ -1,6 +1,7 @@
 import { requireSupabaseAdmin } from '@/lib/supabase-admin'
 import type { SupabaseClient } from '@supabase/supabase-js'
 import * as cheerio from 'cheerio'
+import { sendSMS } from '@/lib/sms'
 
 export interface ParsedJob {
   bdId: string
@@ -21,11 +22,11 @@ const FRAME_URL = `${BASE_URL}/market/main/frame.php`
 const AD_KEYWORDS = ['LMIA', 'RCIP', '영주권', '이민', '대행']
 const REQUEST_HEADERS = {
   'user-agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-  accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
+  'accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
   'accept-language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
   'cache-control': 'no-cache',
-  pragma: 'no-cache',
-  referer: `${BASE_URL}/market/main/frame.php?main=job`,
+  'pragma': 'no-cache',
+  'referer': `${BASE_URL}/market/main/frame.php?main=job`,
 }
 
 // [추가] 이메일/전화번호 분리 유틸리티
@@ -47,7 +48,6 @@ function getListUrl(page: number) {
 
 function getDetailUrl(bdId: string) {
   const url = new URL(FRAME_URL)
-  url.searchParams.set('main', 'job')
   url.searchParams.set('bdId', bdId)
   return url.toString()
 }
@@ -118,10 +118,11 @@ export async function fetchBdIds(page: number): Promise<string[]> {
   const html = await fetchHtml(getListUrl(page))
   const $ = cheerio.load(html)
   const bdIds: string[] = []
+
   $('tr.marketListTr.job_findworker a[href*="bdId="]').each((_, element) => {
     const url = new URL($(element).attr('href')!, FRAME_URL)
     const bdId = url.searchParams.get('bdId')
-    if (bdId) bdIds.push(bdId)
+    if (bdId && !includesAdKeyword(bdId)) bdIds.push(bdId)
   })
   return Array.from(new Set(bdIds))
 }
@@ -167,13 +168,28 @@ export function mapCategory(raw: string): string {
 
 export async function runPipeline(pages = 2) {
   const supabase = requireSupabaseAdmin() as AnySupabase
+  const newJobs: { title: string; contact_phone: string | null }[] = []
+
   for (let page = 1; page <= pages; page += 1) {
     const bdIds = await fetchBdIds(page)
     for (const bdId of bdIds) {
       const parsed = await fetchAndParseDetail(bdId)
       if (!parsed) continue
-      
-      await supabase.from('job_posts').insert({
+
+      // [중복 체크] 동일 source(banjosun) + 동일 title 이미 존재하면 skip
+      const { data: existing } = await supabase
+        .from('job_posts')
+        .select('id')
+        .eq('source', 'banjosun')
+        .eq('title', parsed.title)
+        .limit(1)
+
+      if (existing && existing.length > 0) {
+        console.log(`⏭️ 중복 스킵: ${parsed.title}`)
+        continue
+      }
+
+      const { error } = await supabase.from('job_posts').insert({
         title: parsed.title,
         description: parsed.description,
         location: parsed.location,
@@ -185,7 +201,29 @@ export async function runPipeline(pages = 2) {
         status: 'pending_activation',
         employer_id: null
       })
-      console.log(`✅ 삽입 성공: ${parsed.title}`)
+
+      if (error) {
+        console.error(`❌ 삽입 실패 (${parsed.title}):`, error.message)
+      } else {
+        console.log(`✅ 삽입 성공: ${parsed.title}`)
+        newJobs.push({ title: parsed.title, contact_phone: parsed.contact_phone })
+      }
     }
   }
+
+  // [SMS 알림] 신규 공고가 있으면 각 연락처로 알림 발송
+  console.log(`[scraper] 수집 완료: 총 ${newJobs.length}개 신규 공고`)
+  for (const job of newJobs) {
+    if (job.contact_phone) {
+      const smsBody = `[HireVan] 새로운 구인공고가 등록되었습니다: "${job.title}"`
+      const result = await sendSMS({ to: job.contact_phone, body: smsBody })
+      if (result.ok) {
+        console.log(`📱 SMS 발송 성공: ${job.contact_phone} ← ${job.title}`)
+      } else {
+        console.log(`⚠️ SMS 발송 생략 (환경변수 미설정 또는 오류): ${job.contact_phone}`)
+      }
+    }
+  }
+
+  return { scraped: newJobs.length, jobs: newJobs }
 }
