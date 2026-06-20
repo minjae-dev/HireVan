@@ -25,8 +25,7 @@ export async function sendSMS(input: {
     return { ok: false }
   }
 
-  // @ts-expect-error - twilio is installed at runtime on the server
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
   const twilioMod: any = await import('twilio')
   const client = twilioMod.default(
     process.env.TWILIO_ACCOUNT_SID,
