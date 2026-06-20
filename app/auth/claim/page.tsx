@@ -23,7 +23,7 @@ function ClaimContent() {
   const [error, setError] = useState('')
   const [jobError, setJobError] = useState('')
 
-  // 1) URL의 job_id로 공고 정보를 불러온다
+  // 1) URL의 job_id로 공고 정보를 불러온다 (로그인 여부와 무관하게 먼저 실행)
   useEffect(() => {
     if (!jobId) {
       setJobError('공고 ID가 없습니다. 링크를 다시 확인해주세요.')
@@ -46,16 +46,16 @@ function ClaimContent() {
     fetchJob()
   }, [jobId])
 
-  // 2) 로그인 체크
-  useEffect(() => {
-    if (loading) return
-    if (user === null && jobId) {
-      router.push(`/login?redirect=/auth/claim?job_id=${jobId}`)
-    }
-  }, [user, loading, router, jobId])
-
+  // 2) 버튼 클릭 핸들러 — 로그인 상태에 따라 분기
   const handleClaim = async () => {
-    if (!job || !user || !profile) return
+    // 비로그인 상태 → 로그인 페이지로 이동 (job_id 유지)
+    if (!user) {
+      router.push(`/login?redirect=/auth/claim?job_id=${jobId}`)
+      return
+    }
+
+    // 로그인 상태 → claim API 호출
+    if (!job) return
     setClaiming(true)
     setError('')
 
@@ -64,7 +64,7 @@ function ClaimContent() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          phone: profile.name, // fallback — 실제로는 signup 시 입력한 phone 사용
+          phone: profile?.name, // fallback — 실제로는 signup 시 입력한 phone 사용
           job_id: job.id,
         }),
       })
@@ -202,8 +202,10 @@ function ClaimContent() {
             <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
             처리 중...
           </span>
-        ) : (
+        ) : user ? (
           '내 공고 지원자 확인하고 시작하기'
+        ) : (
+          '로그인하고 공고 활성화하기'
         )}
       </button>
 
