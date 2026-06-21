@@ -339,13 +339,6 @@
   resolved "https://registry.npmjs.org/@nolyfill/is-core-module/-/is-core-module-1.0.39.tgz"
   integrity sha512-nn5ozdjYQpUCZlWGuxcJY/KpxkWQs4DcbMCmKojjyrYDEAGy4Ce19NN4v5MduafTwJlbKc99UA8YhSVqq9yPZA==
 
-"@playwright/test@^1.51.1", "@playwright/test@^1.60.0":
-  version "1.61.0"
-  resolved "https://registry.npmjs.org/@playwright/test/-/test-1.61.0.tgz"
-  integrity sha512-cKA5B6lpFEMyMGjxF54QihfYpB4FkEGH+qZhtArDEG+wezQAJY8Pq6C7T1SjWz+FFzt3TbyoXBQYk/0292TdJA==
-  dependencies:
-    playwright "1.61.0"
-
 "@rtsao/scc@^1.1.0":
   version "1.1.0"
   resolved "https://registry.npmjs.org/@rtsao/scc/-/scc-1.1.0.tgz"
@@ -797,11 +790,6 @@ baseline-browser-mapping@^2.10.12, baseline-browser-mapping@^2.9.19:
   resolved "https://registry.npmjs.org/baseline-browser-mapping/-/baseline-browser-mapping-2.10.38.tgz"
   integrity sha512-31/02mVB4yuQU6adKk5SlY6m+mxDwUq5KZkyYgnLrrKl7TEm1+3PyDtDBz2kOv/wxZz41GHsvV1A/u6RmiyBvw==
 
-bl@^3.0.0:
-  version "3.0.0"
-  dependencies:
-    readable-stream "^3.0.1"
-
 boolbase@^1.0.0:
   version "1.0.0"
   resolved "https://registry.npmjs.org/boolbase/-/boolbase-1.0.0.tgz"
@@ -917,9 +905,6 @@ cheerio@^1.2.0:
     parse5-parser-stream "^7.1.2"
     undici "^7.19.0"
     whatwg-mimetype "^4.0.0"
-
-chownr@^1.1.1:
-  version "1.1.2"
 
 client-only@0.0.1:
   version "0.0.1"
@@ -1175,11 +1160,6 @@ encoding-sniffer@^0.2.1:
   dependencies:
     iconv-lite "^0.6.3"
     whatwg-encoding "^3.1.1"
-
-end-of-stream@^1.1.0, end-of-stream@^1.4.1:
-  version "1.4.1"
-  dependencies:
-    once "^1.4.0"
 
 enhanced-resolve@5.21.6:
   version "5.21.6"
@@ -1668,14 +1648,6 @@ form-data@^4.0.5:
     hasown "^2.0.4"
     mime-types "^2.1.35"
 
-fs-constants@^1.0.0:
-  version "1.0.0"
-
-fsevents@2.3.2:
-  version "2.3.2"
-  resolved "https://registry.npmjs.org/fsevents/-/fsevents-2.3.2.tgz"
-  integrity sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==
-
 function-bind@^1.1.2:
   version "1.1.2"
   resolved "https://registry.npmjs.org/function-bind/-/function-bind-1.1.2.tgz"
@@ -1905,9 +1877,6 @@ imurmurhash@^0.1.4:
   version "0.1.4"
   resolved "https://registry.npmjs.org/imurmurhash/-/imurmurhash-0.1.4.tgz"
   integrity sha512-JmXMZ6wuvDmLiHEml9ykzqO6lwFbof0GG4IkcGaENdCRDDmMVnny7s5HsIgHCbaq0w2MyPhDqkhTUgS2LU2PHA==
-
-inherits@^2.0.3:
-  version "2.0.4"
 
 internal-slot@^1.1.0:
   version "1.1.0"
@@ -2241,13 +2210,6 @@ keyv@^4.5.4:
   dependencies:
     json-buffer "3.0.1"
 
-lambdafs@^1.3.0:
-  version "1.3.0"
-  resolved "https://registry.npmjs.org/lambdafs/-/lambdafs-1.3.0.tgz"
-  integrity sha512-HqRPmEgtkTW4sCYDUjTEuTGkjCHuLvtZU8iM8GkhD7SpjW4AJJbBk86YU4K43sWGuW5Vmzp1lVCx4ab/kJsuBw==
-  dependencies:
-    tar-fs "^2.0.0"
-
 language-subtag-registry@^0.3.20:
   version "0.3.23"
   resolved "https://registry.npmjs.org/language-subtag-registry/-/language-subtag-registry-0.3.23.tgz"
@@ -2409,14 +2371,6 @@ minimist@^1.2.0, minimist@^1.2.6:
   resolved "https://registry.npmjs.org/minimist/-/minimist-1.2.8.tgz"
   integrity sha512-2yyAR8qBkN3YuheJanUpWC5U3bb5osDywNB8RzDVlDwDHbocAJveqqj1u8+SVD7jkWT4yvsHCpWqqWqAxb0zCA==
 
-minimist@0.0.8:
-  version "0.0.8"
-
-mkdirp@^0.5.1:
-  version "0.5.1"
-  dependencies:
-    minimist "0.0.8"
-
 ms@^2.1.1, ms@^2.1.3:
   version "2.1.3"
   resolved "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz"
@@ -2547,11 +2501,6 @@ object.values@^1.1.6, object.values@^1.2.1:
     define-properties "^1.2.1"
     es-object-atoms "^1.0.0"
 
-once@^1.3.1, once@^1.4.0:
-  version "1.4.0"
-  dependencies:
-    wrappy "1"
-
 optionator@^0.9.3:
   version "0.9.4"
   resolved "https://registry.npmjs.org/optionator/-/optionator-0.9.4.tgz"
@@ -2646,27 +2595,6 @@ picomatch@^2.3.1:
   resolved "https://registry.npmjs.org/picomatch/-/picomatch-4.0.4.tgz"
   integrity sha512-QP88BAKvMam/3NxH6vj2o21R6MjxZUAd6nlwAS/pnGvN9IVLocLHxGYIzFhg6fUQ+5th6P4dv4eW9jX3DSIj7A==
 
-playwright-aws-lambda@^0.7.0:
-  version "0.7.0"
-  resolved "https://registry.npmjs.org/playwright-aws-lambda/-/playwright-aws-lambda-0.7.0.tgz"
-  integrity sha512-vmcXA98LioRhcQg9v+xSLk/HHpkfuOyPQTFGx02rtUa00AEYuMQlNIEMSFn50Sm7R8cwQehyzI3FdKcWhYSAdA==
-  dependencies:
-    lambdafs "^1.3.0"
-
-playwright-core@^1, playwright-core@^1.60.0, playwright-core@1.61.0:
-  version "1.61.0"
-  resolved "https://registry.npmjs.org/playwright-core/-/playwright-core-1.61.0.tgz"
-  integrity sha512-caX7TrY3Ml6egyDX0WUcTHDxodl/b51y5wJOdCEA36QviK/s2g081hvmGs8eaE3DWb6NYZQ6BjO/QkNRPenoPA==
-
-playwright@1.61.0:
-  version "1.61.0"
-  resolved "https://registry.npmjs.org/playwright/-/playwright-1.61.0.tgz"
-  integrity sha512-Z+7BeeqQPRRzklHsVFP4KTGIyMxKUmfeRA4WisM6G3/XW6nwGeX6fX9qYaDa+CiUqpOkb2f6X3nar05R3kSuJQ==
-  dependencies:
-    playwright-core "1.61.0"
-  optionalDependencies:
-    fsevents "2.3.2"
-
 possible-typed-array-names@^1.0.0, possible-typed-array-names@^1.1.0:
   version "1.1.0"
   resolved "https://registry.npmjs.org/possible-typed-array-names/-/possible-typed-array-names-1.1.0.tgz"
@@ -2709,12 +2637,6 @@ proxy-from-env@^2.1.0:
   resolved "https://registry.npmjs.org/proxy-from-env/-/proxy-from-env-2.1.0.tgz"
   integrity sha512-cJ+oHTW1VAEa8cJslgmUZrc+sjRKgAKl3Zyse6+PV38hZe/V6Z14TbCuXcan9F9ghlz4QrFr2c92TNF82UkYHA==
 
-pump@^3.0.0:
-  version "3.0.0"
-  dependencies:
-    end-of-stream "^1.1.0"
-    once "^1.3.1"
-
 punycode@^2.1.0:
   version "2.3.1"
   resolved "https://registry.npmjs.org/punycode/-/punycode-2.3.1.tgz"
@@ -2748,13 +2670,6 @@ react-is@^16.13.1:
   version "19.2.4"
   resolved "https://registry.npmjs.org/react/-/react-19.2.4.tgz"
   integrity sha512-9nfp2hYpCwOjAN+8TZFGhtWEwgvWHXqESH8qT89AT/lWklpLON22Lc8pEtnpsZz7VmawabSU0gCjnj8aC0euHQ==
-
-readable-stream@^3.0.1, readable-stream@^3.1.1:
-  version "3.4.0"
-  dependencies:
-    inherits "^2.0.3"
-    string_decoder "^1.1.1"
-    util-deprecate "^1.0.1"
 
 reflect.getprototypeof@^1.0.10, reflect.getprototypeof@^1.0.9:
   version "1.0.10"
@@ -2843,9 +2758,6 @@ safe-buffer@^5.0.1:
   version "5.2.1"
   resolved "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.2.1.tgz"
   integrity sha512-rp3So07KcdmmKbGvgaNxQSJr7bGVSVk5S9Eq1F+ppbRo70+YeaDxkw5Dd8NPN+GD6bjnYm2VuPuCXmpuYvmCXQ==
-
-safe-buffer@~5.2.0:
-  version "5.2.0"
 
 safe-push-apply@^1.0.0:
   version "1.0.0"
@@ -3039,11 +2951,6 @@ stop-iteration-iterator@^1.1.0:
     es-errors "^1.3.0"
     internal-slot "^1.1.0"
 
-string_decoder@^1.1.1:
-  version "1.3.0"
-  dependencies:
-    safe-buffer "~5.2.0"
-
 string-width@^4.1.0, string-width@^4.2.0, string-width@^4.2.3:
   version "4.2.3"
   resolved "https://registry.npmjs.org/string-width/-/string-width-4.2.3.tgz"
@@ -3179,23 +3086,6 @@ tapable@^2.3.3:
   version "2.3.3"
   resolved "https://registry.npmjs.org/tapable/-/tapable-2.3.3.tgz"
   integrity sha512-uxc/zpqFg6x7C8vOE7lh6Lbda8eEL9zmVm/PLeTPBRhh1xCgdWaQ+J1CUieGpIfm2HdtsUpRv+HshiasBMcc6A==
-
-tar-fs@^2.0.0:
-  version "2.0.0"
-  dependencies:
-    chownr "^1.1.1"
-    mkdirp "^0.5.1"
-    pump "^3.0.0"
-    tar-stream "^2.0.0"
-
-tar-stream@^2.0.0:
-  version "2.1.0"
-  dependencies:
-    bl "^3.0.0"
-    end-of-stream "^1.4.1"
-    fs-constants "^1.0.0"
-    inherits "^2.0.3"
-    readable-stream "^3.1.1"
 
 tinyglobby@^0.2.13, tinyglobby@^0.2.15:
   version "0.2.17"
@@ -3382,9 +3272,6 @@ uri-js@^4.2.2:
   dependencies:
     punycode "^2.1.0"
 
-util-deprecate@^1.0.1:
-  version "1.0.2"
-
 whatwg-encoding@^3.1.1:
   version "3.1.1"
   resolved "https://registry.npmjs.org/whatwg-encoding/-/whatwg-encoding-3.1.1.tgz"
@@ -3470,9 +3357,6 @@ wrap-ansi@^7.0.0:
     ansi-styles "^4.0.0"
     string-width "^4.1.0"
     strip-ansi "^6.0.0"
-
-wrappy@1:
-  version "1.0.2"
 
 ws@^8.21.0:
   version "8.21.0"

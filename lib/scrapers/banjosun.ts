@@ -2,7 +2,6 @@ import { sendSMS } from '@/lib/sms';
 import { requireSupabaseAdmin } from '@/lib/supabase-admin';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import * as cheerio from 'cheerio';
-import chromium from 'playwright-aws-lambda';
 export interface ParsedJob {
   bdId: string
   companyName: string
@@ -45,23 +44,13 @@ function getDetailUrl(bdId: string) {
 }
 
 async function fetchHtml(url: string): Promise<string> {
-  const browser = await chromium.launchChromium({ headless: true });
-  const context = await browser.newContext({
-    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-    locale: 'ko-KR',
-    viewport: { width: 1280, height: 800 }
-  })
-  const page = await context.newPage()
+  const apiKey = process.env.SCRAPINGBEE_API_KEY || '93K3RSMRWTK55YOTF3GSYYC0TJM6C5TPGY49SYSMMAD0F9FEN8LWX0UKPPGHBZT0222THDZAEDH3S0B0';
+  const targetUrl = url;
+  const scrapingbeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render_js=false`;
   
-  try {
-    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
-    const html = await page.content()
-    await browser.close()
-    return html
-  } catch (error) {
-    await browser.close()
-    throw error
-  }
+  const response = await fetch(scrapingbeeUrl);
+  if (!response.ok) throw new Error(`HTTP ${response.status}: ${url}`)
+  return response.text()
 }
 
 
