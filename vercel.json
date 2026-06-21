@@ -3,7 +3,7 @@
   "crons": [
     {
       "path": "/api/cron/banjosun?key=8cdfe6e8a6cd2399cac197c5c2fe5e8576a639b1fdffa32377867a910822e0c4",
-      "schedule": "0,30 * * * *"
+"schedule": "0 9 * * *"
     }
   ]
 }
