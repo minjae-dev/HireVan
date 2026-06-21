@@ -2,7 +2,7 @@ import { sendSMS } from '@/lib/sms';
 import { requireSupabaseAdmin } from '@/lib/supabase-admin';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import * as cheerio from 'cheerio';
-import { chromium } from 'playwright';
+import chromium from 'playwright-aws-lambda';
 export interface ParsedJob {
   bdId: string
   companyName: string
@@ -45,7 +45,7 @@ function getDetailUrl(bdId: string) {
 }
 
 async function fetchHtml(url: string): Promise<string> {
-  const browser = await chromium.launch({ headless: true })
+  const browser = await chromium.launchChromium({ headless: true });
   const context = await browser.newContext({
     userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
     locale: 'ko-KR',
@@ -63,6 +63,7 @@ async function fetchHtml(url: string): Promise<string> {
     throw error
   }
 }
+
 
 function normalizeText(value: string) { return value.replace(/\s+/g, ' ').trim() }
 function normalizeLabel(value: string) { return normalizeText(value).replace(/[:：]$/, '').trim() }
