@@ -20,13 +20,12 @@ const BASE_URL = 'https://www.vanchosun.com'
 const FRAME_URL = `${BASE_URL}/market/main/frame.php`
 const AD_KEYWORDS = ['LMIA', 'RCIP', '영주권', '이민', '대행']
 const REQUEST_HEADERS = {
-      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-      'Referer': 'https://www.vanchosun.com/',
-      'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8',
-      'Accept-Language': 'ko-KR,ko;q=0.9,en-US;q=0.8,en;q=0.7',
-      'Connection': 'keep-alive',
-      'Upgrade-Insecure-Requests': '1',
-      'Cookie': 'k8rrgvu70ob3kfn21de13rh4e1'
+    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
+    'Accept-Language': 'ko-KR,ko;q=0.9',
+    'Referer': 'https://www.vanchosun.com/market/main/frame.php?main=job',
+    'Upgrade-Insecure-Requests': '1',
+    'Connection': 'keep-alive'
 }
 
 
