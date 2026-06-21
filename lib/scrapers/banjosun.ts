@@ -1,13 +1,14 @@
-import { sendSMS } from '@/lib/sms'
-import { requireSupabaseAdmin } from '@/lib/supabase-admin'
-import type { SupabaseClient } from '@supabase/supabase-js'
-import * as cheerio from 'cheerio'
+import { sendSMS } from '@/lib/sms';
+import { requireSupabaseAdmin } from '@/lib/supabase-admin';
+import type { SupabaseClient } from '@supabase/supabase-js';
+import * as cheerio from 'cheerio';
+import { chromium } from 'playwright';
 export interface ParsedJob {
   bdId: string
   companyName: string
   contact: string
-  contact_phone: string | null // 추가
-  contact_email: string | null // 추가
+  contact_phone: string | null
+  contact_email: string | null
   title: string
   description: string
   location: string
@@ -19,16 +20,6 @@ type AnySupabase = SupabaseClient
 const BASE_URL = 'https://www.vanchosun.com'
 const FRAME_URL = `${BASE_URL}/market/main/frame.php`
 const AD_KEYWORDS = ['LMIA', 'RCIP', '영주권', '이민', '대행']
-const REQUEST_HEADERS = {
-    'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
-    'Accept-Language': 'ko-KR,ko;q=0.9',
-    'Referer': 'https://www.vanchosun.com/market/main/frame.php?main=job',
-    'Upgrade-Insecure-Requests': '1',
-    'Connection': 'keep-alive'
-}
-
-
 
 // [추가] 이메일/전화번호 분리 유틸리티
 function extractContactInfo(text: string) {
@@ -53,10 +44,24 @@ function getDetailUrl(bdId: string) {
   return url.toString()
 }
 
-async function fetchHtml(url: string) {
-  const response = await fetch(url, { headers: REQUEST_HEADERS })
-  if (!response.ok) throw new Error(`HTTP ${response.status}: ${url}`)
-  return response.text()
+async function fetchHtml(url: string): Promise<string> {
+  const browser = await chromium.launch({ headless: true })
+  const context = await browser.newContext({
+    userAgent: 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0.0.0 Safari/537.36',
+    locale: 'ko-KR',
+    viewport: { width: 1280, height: 800 }
+  })
+  const page = await context.newPage()
+  
+  try {
+    await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30000 })
+    const html = await page.content()
+    await browser.close()
+    return html
+  } catch (error) {
+    await browser.close()
+    throw error
+  }
 }
 
 function normalizeText(value: string) { return value.replace(/\s+/g, ' ').trim() }
@@ -141,7 +146,6 @@ export async function fetchAndParseDetail(bdId: string): Promise<ParsedJob | nul
   const description = extractDescription($, fields)
   const contact = findField(fields, ['구인문의', '연락처', '전화', '문의'], bodyText)
   
-  // [추가] 추출 로직 적용
   const contactInfo = extractContactInfo(contact + " " + bodyText)
   
   if (!description || description.length < 10) return null
@@ -177,7 +181,6 @@ export async function runPipeline(pages = 2) {
       const parsed = await fetchAndParseDetail(bdId)
       if (!parsed) continue
 
-      // [중복 체크] 동일 source(banjosun) + 동일 title 이미 존재하면 skip
       const { data: existing } = await supabase
         .from('job_posts')
         .select('id')
@@ -212,7 +215,6 @@ export async function runPipeline(pages = 2) {
     }
   }
 
-  // [SMS 알림] 신규 공고가 있으면 각 연락처로 알림 발송
   console.log(`[scraper] 수집 완료: 총 ${newJobs.length}개 신규 공고`)
   for (const job of newJobs) {
     if (job.contact_phone) {
