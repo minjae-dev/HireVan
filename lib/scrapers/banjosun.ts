@@ -49,7 +49,12 @@ async function fetchHtml(url: string): Promise<string> {
   const scrapingbeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render_js=true&device=desktop&block_ads=true`;
   
   const response = await fetch(scrapingbeeUrl);
-  if (!response.ok) throw new Error(`HTTP ${response.status}: ${url}`)
+  if (!response.ok) {
+    const errorBody = await response.text();
+    console.error(`[scraper] ScrapingBee Error Status: ${response.status}`);
+    console.error(`[scraper] ScrapingBee Error Body: ${errorBody}`);
+    throw new Error(`ScrapingBee failed with status ${response.status}: ${url}`)
+  }
   return response.text()
 }
 
