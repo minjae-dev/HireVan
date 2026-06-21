@@ -46,7 +46,7 @@ function getDetailUrl(bdId: string) {
 async function fetchHtml(url: string): Promise<string> {
   const apiKey = process.env.SCRAPINGBEE_API_KEY || '93K3RSMRWTK55YOTF3GSYYC0TJM6C5TPGY49SYSMMAD0F9FEN8LWX0UKPPGHBZT0222THDZAEDH3S0B0';
   const targetUrl = url;
-  const scrapingbeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render_js=true&device=desktop&block_ads=true`;
+  const scrapingbeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render_js=true&device=desktop&block_ads=true&timeout=10000&wait_for=3000`;
   
   const response = await fetch(scrapingbeeUrl);
   if (!response.ok) {
@@ -172,9 +172,15 @@ export async function runPipeline(pages = 2) {
 
   for (let page = 1; page <= pages; page += 1) {
     const bdIds = await fetchBdIds(page)
-    for (const bdId of bdIds) {
-      const parsed = await fetchAndParseDetail(bdId)
-      if (!parsed) continue
+  for (const bdId of bdIds) {
+    let parsed: ParsedJob | null = null
+    try {
+      parsed = await fetchAndParseDetail(bdId)
+    } catch (error) {
+      console.warn(`[scraper] 게시글 ${bdId} 로드 실패, 건너뜁니다.`)
+      continue
+    }
+    if (!parsed) continue
 
       const { data: existing } = await supabase
         .from('job_posts')
