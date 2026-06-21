@@ -46,7 +46,7 @@ function getDetailUrl(bdId: string) {
 async function fetchHtml(url: string): Promise<string> {
   const apiKey = process.env.SCRAPINGBEE_API_KEY || '93K3RSMRWTK55YOTF3GSYYC0TJM6C5TPGY49SYSMMAD0F9FEN8LWX0UKPPGHBZT0222THDZAEDH3S0B0';
   const targetUrl = url;
-  const scrapingbeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render_js=false`;
+  const scrapingbeeUrl = `https://app.scrapingbee.com/api/v1/?api_key=${apiKey}&url=${encodeURIComponent(targetUrl)}&render_js=true&device=desktop&block_ads=true`;
   
   const response = await fetch(scrapingbeeUrl);
   if (!response.ok) throw new Error(`HTTP ${response.status}: ${url}`)
