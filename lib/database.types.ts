@@ -324,6 +324,11 @@ export interface Database {
           custom_questions: Json
           deadline: string | null
           created_at: string
+          source: string | null
+          source_url: string | null
+          company_name: string | null
+          contact_phone: string | null
+          contact_email: string | null
         }
         Insert: {
           id?: string
@@ -339,6 +344,11 @@ export interface Database {
           custom_questions?: Json
           deadline?: string | null
           created_at?: string
+          source?: string | null
+          source_url?: string | null
+          company_name?: string | null
+          contact_phone?: string | null
+          contact_email?: string | null
         }
         Update: {
           id?: string
@@ -354,6 +364,11 @@ export interface Database {
           custom_questions?: Json
           deadline?: string | null
           created_at?: string
+          source?: string | null
+          source_url?: string | null
+          company_name?: string | null
+          contact_phone?: string | null
+          contact_email?: string | null
         }
         Relationships: []
       }

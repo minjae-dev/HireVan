@@ -473,6 +473,11 @@
   resolved "https://registry.npmjs.org/@types/json5/-/json5-0.0.29.tgz"
   integrity sha512-dRLjCWHYg4oaA77cxO64oO+7JwCwnIzkZPdrrC71jQmQtlhM556pwKo5bUzqvZndkVbeFLIIi+9TC40JNF5hNQ==
 
+"@types/node-cron@^3.0.11":
+  version "3.0.11"
+  resolved "https://registry.npmjs.org/@types/node-cron/-/node-cron-3.0.11.tgz"
+  integrity sha512-0ikrnug3/IyneSHqCBeslAhlK2aBfYek1fGo4bP4QnZPmiqSGRK+Oy7ZMisLWkesffJvQ1cqAcBnJC+8+nxIAg==
+
 "@types/node@>=18", "@types/node@25.9.1":
   version "25.9.1"
   resolved "https://registry.npmjs.org/@types/node/-/node-25.9.1.tgz"
@@ -2412,6 +2417,11 @@ next@16.2.7:
     "@next/swc-win32-arm64-msvc" "16.2.7"
     "@next/swc-win32-x64-msvc" "16.2.7"
     sharp "^0.34.5"
+
+node-cron@^4.5.0:
+  version "4.5.0"
+  resolved "https://registry.npmjs.org/node-cron/-/node-cron-4.5.0.tgz"
+  integrity sha512-4Trh+kjvbXokyJkwQumvD5YAgeJfgHLR/sKyu71uSmxfCR5QMO1hldpvmFZOICN5pLgNY+J5Y8+ar3XKo5/4tQ==
 
 node-exports-info@^1.6.0:
   version "1.6.0"
