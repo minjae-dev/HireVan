@@ -4,14 +4,22 @@
 
 import { useAuth } from '@/lib/auth-context'
 import type { Database } from '@/lib/database.types'
-import { supabase } from '@/lib/supabase'
 import { syncEmployerJobs } from '@/lib/employerJobs'
+import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useState } from 'react'
 
 type JobPost = Database['public']['Tables']['job_posts']['Row'] & {
   company_name?: string | null
   contact_phone?: string | null
+}
+
+function getSourceName(source: string | null): string {
+  if (!source) return '한인 커뮤니티';
+  if (source.includes('vcs')) return '밴쿠버 조선일보';
+  if (source.includes('kbang')) return 'K-Bang (케이뱅)';
+  if (source.includes('uvanu')) return '우밴유';
+  return '한인 커뮤니티';
 }
 
 function ClaimContent() {
@@ -129,7 +137,7 @@ function ClaimContent() {
         authUserId = signInResult.data.user.id
         setLoginMessage('이미 계정이 있습니다. 자동으로 로그인합니다.')
         // 기존 유저도 공고와 연결되어 있을 수 있음 → 강제 sync
-        // eslint-disable-next-line @typescript-eslint/no-non-null-assertion
+         
         await syncEmployerJobs(authUserId!, job.contact_phone)
       } else {
         // ── Step B: 신규 가입 ──
@@ -343,7 +351,7 @@ function ClaimContent() {
         <p className="text-3xl mb-1">📋</p>
         <h1 className="text-xl font-bold text-gray-900">공고를 확인하고 활성화하세요</h1>
         <p className="text-sm text-gray-500 mt-1">
-          한인마트에 올리신 공고입니다. 계정과 연동하여 지원자를 관리하세요.
+          {getSourceName(job.source)}에 올리신 공고입니다. 계정과 연동하여 지원자를 관리하세요.
         </p>
       </div>
 
@@ -396,7 +404,7 @@ function ClaimContent() {
       {/* ── 설명 문구 ── */}
       <div className="bg-orange-50 border border-orange-100 rounded-xl px-4 py-3 mb-5">
         <p className="text-xs text-orange-700 leading-relaxed">
-          <strong>✔️ 이 공고는 한인마트에서 크롤링된 공고입니다.</strong>
+          <strong>✔️ 이 공고는 {getSourceName(job.source)}에서 크롤링된 공고입니다.</strong>
           <br />
           아래 버튼을 누르면 이 공고가 내 계정에 등록되고, 지원자 확인 및 채팅이 가능해집니다.
         </p>
