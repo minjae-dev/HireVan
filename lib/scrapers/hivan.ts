@@ -17,8 +17,9 @@ const REFERER = 'https://hivan.jaebae.net/';
 const ORIGIN = 'https://hivan.jaebae.net';
 
 /** 오늘 날짜 (2026-06-21) */
-const SCRAPE_DATE = '2026-06-21';
-
+const SCRAPE_DATE = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Vancouver"}))
+  .toISOString()
+  .split('T')[0];
 /** 광고성 키워드 (제목/본문 포함 시 스킵) */
 const AD_KEYWORDS = ['광고', '홍보', '업체제휴'];
 
