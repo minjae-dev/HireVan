@@ -453,9 +453,9 @@ function parseItem(
   const rawLocation = extractLocation(combined, title);
   const location = rawLocation ?? null;
 
-  // 7. 필수값 검증 (null-safe)
-  if (!company && !contact && !wage && !location) {
-    console.log(`[hivan/scraper] ⏭️ 필수값 부족 스킵: ${title}`);
+  // 7. 필수값 검증 (null-safe) — 전화번호는 위에서 이미 검증했으므로 보조 필드만 체크
+  if (!company && !wage && !location && !email) {
+    console.log(`[hivan/scraper] ⏭️ 부가정보 부족 스킵: ${title}`);
     return null;
   }
 
