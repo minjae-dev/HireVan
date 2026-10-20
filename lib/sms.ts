@@ -17,12 +17,12 @@ const log = (...args: unknown[]) => console.log('[sms]', ...args)
 export async function sendSMS(input: {
   to: string
   body: string
-}): Promise<{ ok: boolean }> {
+}): Promise<{ ok: boolean; error?: string }> {
   const { to, body } = input
 
   if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
     console.warn('[sms] Twilio not configured — skipping SMS. Set TWILIO_ACCOUNT_SID and TWILIO_AUTH_TOKEN.')
-    return { ok: false }
+    return { ok: false, error: 'Twilio not configured' }
   }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -45,6 +45,6 @@ export async function sendSMS(input: {
     return { ok: true }
   } catch (err) {
     console.error('[sms] send failed:', err)
-    return { ok: false }
+    return { ok: false, error: err instanceof Error ? err.message : 'SMS send failed' }
   }
 }
