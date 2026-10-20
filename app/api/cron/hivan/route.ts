@@ -1,4 +1,4 @@
-import { runAggregatorPipeline } from '@/lib/scrapers/aggregator';
+import { runHivanPipeline } from '@/lib/scrapers/hivan';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -26,8 +26,8 @@ export async function GET(req: Request) {
 
   console.log('[cron/hivan] 인증 성공 — 파이프라인 시작');
   try {
-    const result = await runAggregatorPipeline();
-    console.log(`[cron/hivan] 완료: scraped=${result.scraped}, saved=${result.saved}`);
+    const result = await runHivanPipeline(5);
+    console.log(`[cron/hivan] 완료: scraped=${result.scraped}`);
     return Response.json(result);
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
