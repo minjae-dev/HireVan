@@ -1,4 +1,7 @@
 {
-  "crons": [],
+  "crons": [
+    { "path": "/api/cron/hivan", "schedule": "0 17 * * *" },
+    { "path": "/api/cron/banjosun", "schedule": "30 18 * * *" }
+  ],
   "regions": ["iad1"]
 }
