@@ -11,7 +11,7 @@ type AnySupabase = SupabaseClient;
 // 게시글을 수집합니다.
 // ============================================================
 
-const BASE_API = 'https://wa.api.jaebae.net/hivancouver';
+const BASE_API = 'https://wrapapi.com/use/mtbnunu/hivancouver';
 const API_KEY = '48voXfwzDZPeNwxOpvF6Jd4YsgpAfTv1';
 const REFERER = 'https://hivan.jaebae.net/';
 const ORIGIN = 'https://hivan.jaebae.net';
@@ -84,6 +84,7 @@ async function fetchFromSource(source: SourceConfig, page = 1): Promise<Record<s
     }
   }
 
+  params.set('wrapAPIKey', API_KEY);
   const url = `${BASE_API}/${source.slug}?${params.toString()}`;
   console.log(`[hivan/scraper] 📡 요청: ${url}`);
 
@@ -95,11 +96,18 @@ async function fetchFromSource(source: SourceConfig, page = 1): Promise<Record<s
     'Accept': 'application/json',
   };
 
-  const response = await fetch(url, {
-    method: source.method,
-    headers,
-    ...(source.body ? { body: JSON.stringify(source.body) } : {}),
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      method: source.method,
+      headers,
+      signal: AbortSignal.timeout(45_000),
+      ...(source.body ? { body: JSON.stringify(source.body) } : {}),
+    });
+  } catch (error) {
+    console.warn(`[hivan/scraper] ⚠️ ${source.name} 요청 실패/타임아웃:`, error);
+    return [];
+  }
 
   if (!response.ok) {
     console.warn(`[hivan/scraper] ⚠️ ${source.name} HTTP ${response.status}: ${response.statusText}`);
@@ -512,12 +520,19 @@ async function saveToDatabase(jobs: HivanJob[], supabase: AnySupabase): Promise<
   let savedCount = 0;
 
   for (const job of jobs) {
-    // 중복 체크: 같은 source_url이 이미 있는지 확인
+    // 전화번호 없는 공고는 스킵 (지원 시 SMS 활성화에 필수)
+    if (!job.phone) {
+      console.log(`[hivan/scraper] ⏭️ 전화번호 없음 스킵: ${job.title}`);
+      continue;
+    }
+
+    // 중복 체크: 같은 source_url이 최근 30일 이내에 삽입된 적 있는지 확인
+    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
     const { data: existing } = await supabase
       .from('job_posts')
       .select('id')
-      .eq('source', `hivan-${job.source_name}`)
-      .eq('title', job.title)
+      .eq('source_url', job.source_url)
+      .gte('created_at', thirtyDaysAgo)
       .limit(1);
 
     if (existing && existing.length > 0) {
