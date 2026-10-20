@@ -15,7 +15,10 @@ export async function GET(req: Request) {
     return Response.json({ error: 'CRON_SECRET not configured' }, { status: 500 });
   }
 
-  if (key !== expected) {
+  const authHeader = req.headers.get('authorization');
+  const isVercelCron = !!expected && authHeader === `Bearer ${expected}`;
+
+  if (key !== expected && !isVercelCron) {
     console.warn(`[cron/hivan] 인증 실패`);
     return Response.json({ error: 'Unauthorized' }, { status: 401 });
   }
