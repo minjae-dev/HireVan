@@ -61,7 +61,7 @@ export async function POST(req: Request) {
     const jobTitle = jobPost.title ?? ''
     const companyName = jobPost.company_name ?? ''
     const claimUrl = `https://hire-van.com/auth/claim?job_id=${jobPost.id}`
-    
+
     // SMS dedupe key — job_post_id 기준 최초 1회만 발송
     const smsDedupeKey = `sms_sent:${jobPost.id}`
 
@@ -71,23 +71,28 @@ export async function POST(req: Request) {
       .from('notification_logs')
       .select('id')
       .eq('dedupe_key', smsDedupeKey)
+      .eq('status', 'sent')
       .maybeSingle()
 
     const alreadySentSms = !!existingSms
 
     // 2) 최초 1회만 SMS 발송
+    let smsSent = false
+    let smsError: string | null = null
     if (jobPost.contact_phone && !alreadySentSms) {
       const smsBody = `[HireVan] "${jobTitle}" 공고에 지원자(${applicantName})가 있습니다. 지금 가입하고 확인하세요: ${claimUrl}`
-      await sendSMS({ to: jobPost.contact_phone, body: smsBody })
+      const smsResult = await sendSMS({ to: jobPost.contact_phone, body: smsBody })
+      smsSent = smsResult.ok
+      if (!smsResult.ok) smsError = smsResult.error ?? 'SMS send failed'
     }
 
     // 3) notification_logs 에 이력 저장 (SMS 발송 여부와 무관하게 지원 이력은 기록)
     const dedupeKey = `unclaimed_app:${jobPost.id}:${record.seeker_id}`
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    await (supabase as any)
+    const { error: appLogError } = await (supabase as any)
       .from('notification_logs')
       .insert({
-        user_id: '__system__',
+        user_id: null,
         type: 'unclaimed_application',
         title: `📩 [지원 발생] ${companyName || jobTitle}`,
         body: `${applicantName}님이 "${jobTitle}" 공고에 지원했습니다. 사장님께서 아직 가입하지 않으셨어요.`,
@@ -99,6 +104,8 @@ export async function POST(req: Request) {
           applicant_name: applicantName,
           deep_link: `/auth/employer-claim?job_id=${jobPost.id}`,
           sms_already_sent: alreadySentSms,
+          sms_sent: smsSent,
+          sms_error: smsError,
         },
         dedupe_key: dedupeKey,
         status: 'sent',
@@ -107,14 +114,17 @@ export async function POST(req: Request) {
       })
       .select('id')
       .maybeSingle()
+    if (appLogError) {
+      console.error('[webhook] unclaimed_application 로그 저장 실패:', appLogError.message)
+    }
 
     // 4) SMS 발송 로그가 없었다면 별도로 기록 (다음 중복 발송 방지)
     if (!alreadySentSms && jobPost.contact_phone) {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      await (supabase as any)
+      const { error: smsLogError } = await (supabase as any)
         .from('notification_logs')
         .insert({
-          user_id: '__system__',
+          user_id: null,
           type: 'new_application_sms',
           title: `SMS 발송: ${companyName || jobTitle}`,
           body: `To: ${jobPost.contact_phone} — 지원자 ${applicantName}`,
@@ -124,19 +134,23 @@ export async function POST(req: Request) {
             applicant_id: record.seeker_id,
           },
           dedupe_key: smsDedupeKey,
-          status: 'sent',
+          status: smsSent ? 'sent' : 'failed',
+          last_error: smsError,
           attempts: 1,
           created_at: new Date().toISOString(),
         })
         .select('id')
         .maybeSingle()
+      if (smsLogError) {
+        console.error('[webhook] new_application_sms 로그 저장 실패:', smsLogError.message)
+      }
 
-      console.log(`[webhook] SMS 발송 완료 (최초): job=${jobPost.id}, phone=${jobPost.contact_phone}`)
+      console.log(`[webhook] SMS 발송 결과: job=${jobPost.id}, phone=${jobPost.contact_phone}, ok=${smsSent}`)
     } else {
       console.log(`[webhook] SMS 발송 생략 (중복 방지): job=${jobPost.id}`)
     }
 
-    return Response.json({ ok: true, claimed: false, sms_sent: !alreadySentSms })
+    return Response.json({ ok: true, claimed: false, sms_sent: smsSent })
   }
 
   // ──────────────────────────────────────────────────────────────────
