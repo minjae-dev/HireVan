@@ -16,8 +16,10 @@ export async function GET(req: Request) {
     return Response.json({ error: 'CRON_SECRET not configured' }, { status: 500 })
   }
 
-  // 이제 헤더가 아니라 URL 파라미터(key)를 확인합니다.
-  if (key !== expected) {
+  // URL 파라미터(key) 또는 Vercel Cron의 Authorization: Bearer <CRON_SECRET> 헤더를 확인합니다.
+  const authHeader = req.headers.get('authorization')
+  const isVercelCron = !!expected && authHeader === `Bearer ${expected}`
+  if (key !== expected && !isVercelCron) {
     console.warn(`[cron/banjosun] 인증 실패: 제공된 키=${key}`)
     return Response.json({ error: 'Unauthorized' }, { status: 401 })
   }
