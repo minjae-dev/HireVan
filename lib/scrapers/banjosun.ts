@@ -1,5 +1,4 @@
 import { fetch } from 'undici';
-import { sendSMS } from '@/lib/sms';
 import { requireSupabaseAdmin } from '@/lib/supabase-admin';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import * as cheerio from 'cheerio';
@@ -217,17 +216,8 @@ export async function runPipeline(pages = 2) {
   }
 
   console.log(`[scraper] 수집 완료: 총 ${newJobs.length}개 신규 공고`)
-  for (const job of newJobs) {
-    if (job.contact_phone) {
-      const smsBody = `[HireVan] 새로운 구인공고가 등록되었습니다: "${job.title}"`
-      const result = await sendSMS({ to: job.contact_phone, body: smsBody })
-      if (result.ok) {
-        console.log(`📱 SMS 발송 성공: ${job.contact_phone} ← ${job.title}`)
-      } else {
-        console.log(`⚠️ SMS 발송 생략 (환경변수 미설정 또는 오류): ${job.contact_phone}`)
-      }
-    }
-  }
+  // 주의: 수집 시점에 업체로 SMS를 보내지 않는다. 업체 연락은 지원이
+  // 접수됐을 때 웹훅(app/api/webhooks/application-submitted)이 담당한다.
 
   return { scraped: newJobs.length, jobs: newJobs }
 }
