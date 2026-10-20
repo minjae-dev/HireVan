@@ -88,7 +88,10 @@ async function fetchAggregatorHtml(): Promise<string> {
     api_key: apiKey,
     url: AGGREGATOR_JOBS_URL,
     render_js: 'true',
-    wait: '3000',
+    wait: '5000',
+    // 카드(원본 게시판 링크)가 DOM에 나타날 때까지 대기
+    wait_for:
+      'a[href*="vanchosun.com"], a[href*="cafe.daum.net"], a[href*="k-bang.com"], a[href*="cafe.naver.com"]',
   });
 
   const response = await fetch(`${SCRAPINGBEE_API_URL}?${params.toString()}`, {
@@ -279,6 +282,9 @@ export async function runAggregatorPipeline(): Promise<{
   console.log(`[aggregator] 🚀 수집 시작 (기준일 ${today})`);
 
   const html = await fetchAggregatorHtml();
+  console.log(
+    `[aggregator] HTML ${html.length}자 수신 (vanchosun ${html.split('vanchosun.com').length - 1}회, daum ${html.split('cafe.daum.net').length - 1}회, h3 ${(html.match(/<h3/g) || []).length}개)`,
+  );
   const allCards = parseCards(html);
   console.log(`[aggregator] 카드 ${allCards.length}개 파싱`);
 
