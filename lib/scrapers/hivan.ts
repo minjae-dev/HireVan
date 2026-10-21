@@ -11,6 +11,14 @@ type AnySupabase = SupabaseClient;
 // 게시글을 수집합니다.
 // ============================================================
 
+/** UTC ISO 타임스탬프를 America/Vancouver 날짜(YYYY-MM-DD)로 변환. 파싱 실패 시 빈 문자열 */
+function toVancouverDate(isoStr: string): string {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  if (isNaN(d.getTime())) return '';
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Vancouver' }).format(d);
+}
+
 const BASE_API = 'https://wrapapi.com/use/mtbnunu/hivancouver';
 const API_KEY = '48voXfwzDZPeNwxOpvF6Jd4YsgpAfTv1';
 const REFERER = 'https://hivan.jaebae.net/';
@@ -53,11 +61,8 @@ const SOURCES: SourceConfig[] = [
     method: 'GET',
     query: { service: 'job', area: 'YVR', page: '1', page_size: '100' },
     makeUrl: (item) => `https://vancouver.k-bang.com/ko/listings/${item.id}`,
-    makeDate: (item) => {
-      const d = item.date as string;
-      if (d) return d.split('T')[0];
-      return '';
-    },
+    // 피드 date는 UTC ISO 타임스탬프 → 밴쿠버 날짜로 변환해 비교 (UTC 날짜 그대로 쓰면 저녁 게시글이 어긋남)
+    makeDate: (item) => toVancouverDate(String(item.date ?? '')),
   },
   {
     name: 'uvanu-job',
@@ -65,11 +70,8 @@ const SOURCES: SourceConfig[] = [
     method: 'GET',
     query: { grpid: 'hPc', fldid: '1xBD', page: '1', page_size: '100' },
     makeUrl: (item) => `https://m.cafe.daum.net/ourvancouver/1xBD/${item.dataid}`,
-    makeDate: (item) => {
-      const d = item.date as string;
-      if (d) return d.split('T')[0];
-      return '';
-    },
+    // 피드 date는 UTC ISO 타임스탬프 → kbang과 동일하게 밴쿠버 날짜로 변환
+    makeDate: (item) => toVancouverDate(String(item.date ?? '')),
   },
 ];
 
@@ -200,7 +202,7 @@ function stripHtml(html: string): string {
 // ============================================================
 // 연락처 추출
 // ============================================================
-function extractContact(text: string): {
+function extractContact(text: string, opts?: { fullPhoneOnly?: boolean }): {
   contact: string;
   phone: string | null;
   email: string | null;
@@ -234,7 +236,8 @@ function extractContact(text: string): {
     phone = phoneMatches.sort((a, b) => b.length - a.length)[0].trim();
     // 전화번호 정규화: 공백/특수문자 제거 (가독성 유지)
     phone = phone.replace(/[^\d+\-.\s()]/g, '').trim();
-  } else {
+  } else if (!opts?.fullPhoneOnly) {
+    // 7자리 폴백은 본문 전체 텍스트에서는 주소(#1780-4151 등)와 충돌하므로 상세 보강 시에는 끈다
     const shortPhoneMatches = text.match(phonePatterns[1]);
     if (shortPhoneMatches) {
       // 7자리 번호는 연속된 7자리만 추출 (다른 숫자와 구분)
@@ -432,11 +435,12 @@ function extractLocation(text: string, title: string): string | null {
 function parseItem(
   item: Record<string, unknown>,
   source: SourceConfig,
+  detailText = '',
 ): HivanJob | null {
   const title = normalizeText(String(item.title ?? ''));
   const rawDate = source.makeDate(item);
   const preview = stripHtml(String(item.preview ?? ''));
-  const combined = `${title} ${preview}`;
+  const combined = `${title} ${preview} ${detailText}`;
 
   // 1. 날짜 필터링
   if (!isToday(rawDate)) return null;
@@ -450,8 +454,8 @@ function parseItem(
   // 3. 업체명 추출
   const company = extractCompany(combined, title);
 
-  // 4. 연락처 추출
-  const { contact, phone, email } = extractContact(combined);
+  // 4. 연락처 추출 (상세 본문까지 포함된 경우 10자리 전화번호만 인정)
+  const { contact, phone, email } = extractContact(combined, { fullPhoneOnly: detailText.length > 0 });
 
   // 5. 시급 추출
   const rawWage = extractWage(combined);
@@ -472,7 +476,7 @@ function parseItem(
   return {
     title,
     company,
-    description: preview,
+    description: preview || detailText.slice(0, 2000),
     contact,
     phone,
     email,
@@ -485,17 +489,76 @@ function parseItem(
 }
 
 // ============================================================
+// 우벤유(다음 카페) 상세 페이지 본문 페치
+// ============================================================
+// 우벤유 피드는 본문(preview)을 주지 않아 전화번호 추출이 불가능하다.
+// 상세 페이지(m.cafe.daum.net)는 서버 렌더링이라 본문 텍스트를 바로 얻을 수 있다.
+const UVANU_DETAIL_MAX_FETCHES = 25;      // 런당 상세 페치 상한
+const UVANU_DETAIL_TIMEOUT_MS = 8_000;    // 건당 타임아웃
+const UVANU_DETAIL_BUDGET_MS = 120_000;   // 보강 단계 전체 시간 예산 (maxDuration 300s 보호)
+
+async function fetchUvanuDetailText(url: string): Promise<string> {
+  try {
+    const res = await fetch(url, {
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1',
+      },
+      signal: AbortSignal.timeout(UVANU_DETAIL_TIMEOUT_MS),
+    });
+    if (!res.ok) {
+      console.warn(`[hivan/scraper] ⚠️ 우벤유 상세 HTTP ${res.status}: ${url}`);
+      return '';
+    }
+    const html = await res.text();
+    // 스크립트/스타일 내용을 먼저 제거한 뒤 태그 스트립 (숫자 오탐 방지)
+    const noScripts = html.replace(/<(script|style)[\s\S]*?<\/\1>/gi, ' ');
+    return stripHtml(noScripts).slice(0, 4000);
+  } catch (error) {
+    console.warn(`[hivan/scraper] ⚠️ 우벤유 상세 페치 실패 (${url}):`, error);
+    return '';
+  }
+}
+
+// ============================================================
 // 모든 소스 페이지 순회
 // ============================================================
 async function crawlSource(source: SourceConfig, maxPages = 5): Promise<HivanJob[]> {
   const allJobs: HivanJob[] = [];
+  // 우벤유 상세 페치 상태: 중복 URL(피드 페이지 반복)은 캐시 재사용, 예산 초과 시 중단
+  const detailCache = new Map<string, string>();
+  let detailFetches = 0;
+  const enrichStart = Date.now();
 
   for (let page = 1; page <= maxPages; page++) {
     const items = await fetchFromSource(source, page);
     if (items.length === 0) break;
 
     for (const item of items) {
-      const parsed = parseItem(item, source);
+      let parsed = parseItem(item, source);
+
+      // 우벤유: 전화번호가 없으면(또는 부가정보 부족으로 스킵됐으면) 상세 본문으로 재파싱
+      if (
+        source.name === 'uvanu-job' &&
+        (!parsed || !parsed.phone) &&
+        detailFetches < UVANU_DETAIL_MAX_FETCHES &&
+        Date.now() - enrichStart < UVANU_DETAIL_BUDGET_MS
+      ) {
+        const url = source.makeUrl(item);
+        let detailText = detailCache.get(url);
+        if (detailText === undefined) {
+          detailFetches++;
+          detailText = await fetchUvanuDetailText(url);
+          detailCache.set(url, detailText);
+        }
+        if (detailText) {
+          const reparsed = parseItem(item, source, detailText);
+          if (reparsed && (!parsed || reparsed.phone)) {
+            console.log(`[hivan/scraper] 🔎 우벤유 상세 보강: ${reparsed.title} → 전화 ${reparsed.phone ?? '없음'}`);
+            parsed = reparsed;
+          }
+        }
+      }
+
       if (parsed) allJobs.push(parsed);
     }
 
