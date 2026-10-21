@@ -1,6 +1,1 @@
-{
-  "crons": [
-    { "path": "/api/cron/hivan", "schedule": "0 17 * * *" }
-  ],
-  "regions": ["iad1"]
-}
+{"crons":[{"path":"/api/cron/hivan","schedule":"0 17 * * *"},{"path":"/api/cron/hivan","schedule":"0 1 * * *"}],"regions":["iad1"]}
