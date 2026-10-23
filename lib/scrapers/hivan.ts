@@ -579,13 +579,19 @@ async function crawlSource(source: SourceConfig, maxPages = 5): Promise<HivanJob
 // ============================================================
 // DB 저장
 // ============================================================
-async function saveToDatabase(jobs: HivanJob[], supabase: AnySupabase): Promise<number> {
+export async function saveToDatabase(jobs: HivanJob[], supabase: AnySupabase): Promise<number> {
   let savedCount = 0;
 
   for (const job of jobs) {
     // 전화번호 없는 공고는 스킵 (지원 시 SMS 활성화에 필수)
     if (!job.phone) {
       console.log(`[hivan/scraper] ⏭️ 전화번호 없음 스킵: ${job.title}`);
+      continue;
+    }
+
+    // 10자리 미만 번호는 주소·날짜 조각 오탐(예: 780-4151)이므로 스킵 — 숫자만 세어 판정
+    if (job.phone.replace(/\D/g, '').length < 10) {
+      console.log(`[hivan/scraper] ⏭️ 전화번호 자릿수 부족 스킵 (${job.phone}): ${job.title}`);
       continue;
     }
 
