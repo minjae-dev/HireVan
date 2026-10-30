@@ -74,13 +74,11 @@ export default function ChatListPage() {
         `)
         .or(`employer_id.eq.${user.id},seeker_id.eq.${user.id}`)
         .order('created_at', { ascending: false })
+        // 방마다 마지막 메시지 1건만 (전체 메시지를 받아 클라이언트에서 자르지 않도록)
+        .order('created_at', { referencedTable: 'messages', ascending: false })
+        .limit(1, { referencedTable: 'messages' })
 
-      const roomsWithMessages = ((data ?? []) as unknown as ChatRoomRow[]).map(room => ({
-        ...room,
-        messages: (room.messages as MessagePreview[] | null)
-          ?.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
-          ?.slice(0, 1) ?? null,
-      }))
+      const roomsWithMessages = (data ?? []) as unknown as ChatRoomRow[]
 
       setRooms(roomsWithMessages)
       // 첫 로드 시 모든 공고 그룹을 펼쳐서 보여줌

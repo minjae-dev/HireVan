@@ -3,7 +3,6 @@
 import { createContext, useContext, useEffect, useState } from 'react'
 import { User, Session } from '@supabase/supabase-js'
 import { supabase } from '@/lib/supabase'
-import { syncEmployerJobs } from '@/lib/employerJobs'
 import type { Database } from '@/lib/database.types'
 
 type Profile = Database['public']['Tables']['profiles']['Row']
@@ -60,19 +59,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setSession(session)
       setUser(session?.user ?? null)
       if (session?.user) {
-        ;(async () => {
-          await fetchProfile(session.user.id)
-          // employer 로그인 시 보류 중인 공고 자동 매칭
-          const profileRow = (await supabase
-            .from('profiles')
-            .select('phone, role')
-            .eq('id', session.user.id)
-            .maybeSingle()) as { data: { phone: string | null; role: string } | null }
-
-          if (profileRow.data?.role === 'employer' && profileRow.data?.phone) {
-            await syncEmployerJobs(session.user.id, profileRow.data.phone)
-          }
-        })()
+        // 크롤링 공고 연결은 SMS claim 토큰으로만 한다 (/api/auth/employer-claim).
+        // profiles.phone 은 사용자가 입력한 값이라 소유 증명이 안 되므로 자동 매칭하지 않는다.
+        fetchProfile(session.user.id)
       } else {
         setProfile(null)
       }

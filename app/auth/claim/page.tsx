@@ -4,7 +4,6 @@
 
 import { useAuth } from '@/lib/auth-context'
 import type { Database } from '@/lib/database.types'
-import { syncEmployerJobs } from '@/lib/employerJobs'
 import { supabase } from '@/lib/supabase'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { Suspense, useEffect, useState } from 'react'
@@ -25,6 +24,8 @@ function getSourceName(source: string | null): string {
 function ClaimContent() {
   const searchParams = useSearchParams()
   const jobId = searchParams.get('job_id')
+  // SMS 로 contact_phone 에만 전달된 일회용 토큰 — 전화번호 소유 증명
+  const claimToken = searchParams.get('token')
   const { profile, user, refreshProfile } = useAuth()
   const router = useRouter()
   const [job, setJob] = useState<JobPost | null>(null)
@@ -49,8 +50,8 @@ function ClaimContent() {
 
   // 1) URL의 job_id로 공고 정보를 불러온다 (로그인 불필요)
   useEffect(() => {
-    if (!jobId) {
-      setJobError('공고 ID가 없습니다. 링크를 다시 확인해주세요.')
+    if (!jobId || !claimToken) {
+      setJobError('링크 정보가 올바르지 않습니다. 링크를 다시 확인해주세요.')
       setLoading(false)
       return
     }
@@ -68,7 +69,7 @@ function ClaimContent() {
       setLoading(false)
     }
     fetchJob()
-  }, [jobId])
+  }, [jobId, claimToken])
 
   // 2) 이미 로그인된 employer면 바로 claim
   useEffect(() => {
@@ -87,20 +88,27 @@ function ClaimContent() {
     handleClaim()
   }
 
+  /** 현재 로그인 세션으로 claim API 호출 */
+  const requestClaim = async (jobPostId: string) => {
+    const { data: { session } } = await supabase.auth.getSession()
+    if (!session) throw new Error('로그인 세션이 없습니다. 다시 로그인해주세요.')
+    const res = await fetch('/api/auth/employer-claim', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${session.access_token}`,
+      },
+      body: JSON.stringify({ job_id: jobPostId, claim_token: claimToken }),
+    })
+    return res.json()
+  }
+
   const handleClaim = async () => {
     if (!job) return
     setStep('claiming')
     setError('')
     try {
-      const res = await fetch('/api/auth/employer-claim', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          job_id: job.id,
-          phone: job.contact_phone, // ← API가 profile을 찾기 위해 필수
-        }),
-      })
-      const data = await res.json()
+      const data = await requestClaim(job.id)
       if (!data.ok) {
         setError(data.message || data.error || '활성화에 실패했습니다.')
         setStep('preview')
@@ -136,9 +144,6 @@ function ClaimContent() {
         // 기존 계정 발견 → 자동 로그인 + 공고 매칭
         authUserId = signInResult.data.user.id
         setLoginMessage('이미 계정이 있습니다. 자동으로 로그인합니다.')
-        // 기존 유저도 공고와 연결되어 있을 수 있음 → 강제 sync
-         
-        await syncEmployerJobs(authUserId!, job.contact_phone)
       } else {
         // ── Step B: 신규 가입 ──
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -152,14 +157,14 @@ function ClaimContent() {
         }
         authUserId = signUpResult.data.user.id
 
-        // ── Step C: profiles 생성 (phone 필드 포함!) ──
+        // ── Step C: profiles 생성 (phone 은 claim API 가 토큰 검증 후 설정) ──
       // authUserId는 signIn 또는 signUp으로 반드시 설정되므로 non-null assertion 사용
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { error: profileError } = await (supabase as any).from('profiles').insert({
         id: authUserId!,
         role: 'employer',
         name: editableName,
-        phone: job.contact_phone ?? null,
+        phone: null,
       })
 
         if (profileError) {
@@ -170,26 +175,13 @@ function ClaimContent() {
         }
       }
 
-      // ── Step D: 공고-계정 강제 매칭 (회원가입 직후)
-      //    signUp으로 생성된 새 계정의 authUserId로 연결
-      //    employer-claim API가 처리하지만, 여기서도 사전 sync 수행
-      await syncEmployerJobs(authUserId!, job.contact_phone)
-
       // ── Step E: 프로필 리프레시
       await refreshProfile()
 
       // 세션이 새 user로 갱신될 때까지 잠시 대기
       await new Promise(r => setTimeout(r, 500))
 
-      const res = await fetch('/api/auth/employer-claim', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          job_id: job.id,
-          phone: job.contact_phone, // ← API가 profile을 찾기 위해 필수
-        }),
-      })
-      const data = await res.json()
+      const data = await requestClaim(job.id)
       if (!data.ok) {
         setError(data.message || data.error || '공고 연결에 실패했습니다.')
         setStep('signup')
@@ -332,7 +324,7 @@ function ClaimContent() {
           <p className="text-center mt-5 text-sm text-gray-400">
             이미 계정이 있으신가요?{' '}
             <button
-              onClick={() => router.push(`/login?redirect=/auth/claim?job_id=${jobId}`)}
+              onClick={() => router.push(`/login?redirect=${encodeURIComponent(`/auth/claim?job_id=${jobId}&token=${claimToken}`)}`)}
               className="text-orange-500 font-medium hover:underline"
             >
               로그인

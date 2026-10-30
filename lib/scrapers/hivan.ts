@@ -1,4 +1,5 @@
 import { requireSupabaseAdmin } from '@/lib/supabase-admin';
+import { normalizePhone } from '@/lib/phone';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 type AnySupabase = SupabaseClient;
@@ -24,10 +25,10 @@ const API_KEY = '48voXfwzDZPeNwxOpvF6Jd4YsgpAfTv1';
 const REFERER = 'https://hivan.jaebae.net/';
 const ORIGIN = 'https://hivan.jaebae.net';
 
-/** 오늘 날짜 (2026-06-21) */
-const SCRAPE_DATE = new Date(new Date().toLocaleString("en-US", {timeZone: "America/Vancouver"}))
-  .toISOString()
-  .split('T')[0];
+/** 호출 시점의 밴쿠버 날짜. 모듈 상수로 두면 pm2 상주 프로세스에서 첫날로 고정된다 */
+function scrapeDate(): string {
+  return toVancouverDate(new Date().toISOString());
+}
 /** 광고성 키워드 (제목/본문 포함 시 스킵) */
 const AD_KEYWORDS = ['광고', '홍보', '업체제휴'];
 
@@ -152,7 +153,9 @@ function isToday(dateStr: string): boolean {
   if (!dateStr) return false;
   // dateStr이 "2026-06-21" 형식이거나 "2026-06-21T..." 형식
   const normalized = dateStr.split('T')[0].split(' ')[0];
-  return normalized === SCRAPE_DATE;
+  // 어제까지 허용: 마지막 cron(18시) 이후 자정 전 게시글 누락 방지. 재수집 중복은 source_url unique로 차단
+  const yesterday = toVancouverDate(new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+  return normalized === scrapeDate() || normalized === yesterday;
 }
 
 // ============================================================
@@ -580,57 +583,45 @@ async function crawlSource(source: SourceConfig, maxPages = 5): Promise<HivanJob
 // DB 저장
 // ============================================================
 export async function saveToDatabase(jobs: HivanJob[], supabase: AnySupabase): Promise<number> {
-  let savedCount = 0;
+  // 같은 런 안에서 페이지가 밀려 같은 글이 두 번 잡히는 경우 제거
+  const byUrl = new Map<string, Record<string, unknown>>();
 
   for (const job of jobs) {
-    // 전화번호 없는 공고는 스킵 (지원 시 SMS 활성화에 필수)
-    if (!job.phone) {
-      console.log(`[hivan/scraper] ⏭️ 전화번호 없음 스킵: ${job.title}`);
+    // 전화번호 없는/10자리 아닌 공고는 스킵 (지원 시 SMS 활성화에 필수, 짧은 번호는 주소 조각 오탐)
+    const phone = normalizePhone(job.phone);
+    if (!phone) {
+      console.log(`[hivan/scraper] ⏭️ 전화번호 없음/형식 오류 스킵 (${job.phone ?? '-'}): ${job.title}`);
       continue;
     }
 
-    // 10자리 미만 번호는 주소·날짜 조각 오탐(예: 780-4151)이므로 스킵 — 숫자만 세어 판정
-    if (job.phone.replace(/\D/g, '').length < 10) {
-      console.log(`[hivan/scraper] ⏭️ 전화번호 자릿수 부족 스킵 (${job.phone}): ${job.title}`);
-      continue;
-    }
-
-    // 중복 체크: 같은 source_url이 최근 30일 이내에 삽입된 적 있는지 확인
-    const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
-    const { data: existing } = await supabase
-      .from('job_posts')
-      .select('id')
-      .eq('source_url', job.source_url)
-      .gte('created_at', thirtyDaysAgo)
-      .limit(1);
-
-    if (existing && existing.length > 0) {
-      console.log(`[hivan/scraper] ⏭️ 중복 스킵: ${job.title}`);
-      continue;
-    }
-
-    const { error } = await supabase.from('job_posts').insert({
+    byUrl.set(job.source_url, {
       title: job.title,
       description: job.description || '',
       location: job.location ?? '',
       company_name: job.company || null,
-      contact_phone: job.phone,
+      contact_phone: phone,
       contact_email: job.email,
       source: `hivan-${job.source_name}`,
       source_url: job.source_url,
       status: 'pending_activation',
       employer_id: null,
     });
-
-    if (error) {
-      console.error(`[hivan/scraper] ❌ 삽입 실패 (${job.title}):`, error.message);
-    } else {
-      console.log(`[hivan/scraper] ✅ 삽입 성공: ${job.title}`);
-      savedCount++;
-    }
   }
 
-  return savedCount;
+  const rows = [...byUrl.values()];
+  if (rows.length === 0) return 0;
+
+  // source_url unique 인덱스 기준으로 원자적 중복 차단 (동시 실행돼도 1건만 insert)
+  const { data, error } = await supabase
+    .from('job_posts')
+    .upsert(rows, { onConflict: 'source_url', ignoreDuplicates: true })
+    .select('id');
+
+  if (error) {
+    console.error(`[hivan/scraper] ❌ 삽입 실패:`, error.message);
+    throw error;
+  }
+  return data?.length ?? 0;
 }
 
 // ============================================================
@@ -641,7 +632,7 @@ export async function runHivanPipeline(maxPages = 5): Promise<{
   jobs: HivanJob[];
 }> {
   console.log('========================================');
-  console.log(`[hivan/scraper] 🚀 수집 시작: ${SCRAPE_DATE}`);
+  console.log(`[hivan/scraper] 🚀 수집 시작: ${scrapeDate()}`);
   console.log(`[hivan/scraper] 대상 소스: ${SOURCES.map((s) => s.name).join(', ')}`);
   console.log('========================================');
 
@@ -694,7 +685,7 @@ export async function collectHivanJobs(maxPages = 5): Promise<{
     success: true,
     count: allJobs.length,
     jobs: allJobs,
-    date: SCRAPE_DATE,
+    date: scrapeDate(),
     sources: SOURCES.map((s) => s.name),
   };
 }

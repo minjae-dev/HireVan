@@ -43,31 +43,22 @@ export async function fetchUserChatRooms(userId: string): Promise<ChatRoomWithLa
       *,
       job_posts(title, location, status),
       employer:profiles!chat_rooms_employer_id_fkey(name),
-      seeker:profiles!chat_rooms_seeker_id_fkey(name)
+      seeker:profiles!chat_rooms_seeker_id_fkey(name),
+      messages(content, created_at)
     `)
     .or(`employer_id.eq.${userId},seeker_id.eq.${userId}`)
     .order('created_at', { ascending: false })
+    // 마지막 메시지를 embed 로 1건만 가져온다 (방마다 추가 쿼리 → N+1 방지)
+    .order('created_at', { referencedTable: 'messages', ascending: false })
+    .limit(1, { referencedTable: 'messages' })
   if (error) throw error
 
-  const rooms = (data as unknown as ChatRoom[]) ?? []
-  // 각 채팅방의 마지막 메시지 병렬 조회
-  const enriched = await Promise.all(
-    rooms.map(async room => {
-      const { data: lastMsg } = await supabase
-        .from('messages')
-        .select('content, created_at')
-        .eq('chat_room_id', room.id)
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      const msg = lastMsg as unknown as { content: string; created_at: string } | null
-      return {
-        ...room,
-        last_message: msg?.content ?? null,
-        last_message_at: msg?.created_at ?? null,
-      }
-    }),
-  )
+  const rooms = (data as unknown as (ChatRoom & { messages: { content: string; created_at: string }[] | null })[]) ?? []
+  const enriched: ChatRoomWithLastMessage[] = rooms.map(({ messages, ...room }) => ({
+    ...room,
+    last_message: messages?.[0]?.content ?? null,
+    last_message_at: messages?.[0]?.created_at ?? null,
+  }))
 
   // 마지막 활동 시간 기준 재정렬
   enriched.sort((a, b) => {
