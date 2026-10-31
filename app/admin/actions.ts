@@ -75,6 +75,22 @@ export async function toggleAdminStatus(userId: string, isAdmin: boolean) {
   }
 }
 
+// is_admin 은 클라이언트 SELECT 불가 컬럼이라 회원 목록은 서버에서 조회한다
+export async function listMembers() {
+  try {
+    await requireAdmin()
+    const adminClient = requireSupabaseAdmin()
+    const { data, error } = await adminClient
+      .from('profiles')
+      .select('id, name, role, is_admin, created_at')
+      .order('created_at', { ascending: false })
+    if (error) throw new Error(error.message)
+    return { success: true, members: data ?? [] }
+  } catch (error) {
+    return { success: false, message: (error as Error).message, members: [] }
+  }
+}
+
 export async function deleteUser(userId: string) {
   try {
     await requireAdmin()

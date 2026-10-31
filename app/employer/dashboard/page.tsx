@@ -124,40 +124,19 @@ export default function EmployerDashboardPage() {
     setSeekersLoading(true)
     setSearched(true)
     try {
-      let query = supabase
-        .from('profiles_public')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(30)
-
-      if (filterNeighborhood) {
-        query = query.eq('neighborhood', filterNeighborhood)
-      }
-
-      if (filterCert === 'sir') {
-        query = query.eq('has_sir', true)
-      }
-
-      if (filterCert === 'foodsafe') {
-        query = query.eq('has_foodsafe', true)
-      }
-
-      const { data, error } = await query
+      // 서버가 Pro/열람이력 없는 구직자는 상세 필드를 빼고 내려준다 (필터도 서버에서 적용)
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data, error } = await (supabase as any).rpc('search_seekers', {
+        p_neighborhood: filterNeighborhood || null,
+        p_cert: filterCert || null,
+        p_limit: 30,
+      })
 
       if (error) {
         console.warn('[dashboard] fetch seekers error:', error)
         setSeekers([])
       } else {
-        let list = (data as PublicProfile[]) ?? []
-        if (filterNeighborhood) {
-          list = list.filter(s => s.neighborhood === filterNeighborhood)
-        }
-        if (filterCert === 'sir') {
-          list = list.filter(s => s.has_sir === true)
-        } else if (filterCert === 'foodsafe') {
-          list = list.filter(s => s.has_foodsafe === true)
-        }
-        setSeekers(list)
+        setSeekers((data as PublicProfile[] | null) ?? [])
       }
     } finally {
       setSeekersLoading(false)
