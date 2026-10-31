@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { supabase } from '@/lib/supabase'
 import { useAuth } from '@/lib/auth-context'
 import type { Database } from '@/lib/database.types'
+import ResumeLink from '@/components/ResumeLink'
 
 const MAX_QUESTIONS_FREE = 3
 const MAX_QUESTIONS_PRO = 5
@@ -672,14 +673,12 @@ function ApplicationSubmission({
       <div className="mb-3 flex items-center justify-between gap-3">
         <p className="text-xs font-bold text-gray-700">제출 자료</p>
         {app.resume_url ? (
-          <a
-            href={app.resume_url}
-            target="_blank"
-            rel="noreferrer"
+          <ResumeLink
+            fileRef={app.resume_url}
             className="rounded-xl bg-white px-3 py-2 text-xs font-bold text-orange-600 shadow-sm"
           >
             이력서 보기
-          </a>
+          </ResumeLink>
         ) : requireResume ? (
           <span className="text-xs font-semibold text-red-500">이력서 없음</span>
         ) : null}

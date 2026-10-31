@@ -10,6 +10,7 @@ import { usePollProUpgrade } from '@/lib/usePollProUpgrade'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useCallback, useEffect, useState } from 'react'
+import ResumeLink from '@/components/ResumeLink'
 
 type ReceivedReview = {
   id: string
@@ -186,7 +187,6 @@ export default function ProfilePage() {
 
     console.log('Upload successful:', uploadData)
 
-    const { data: publicUrlData } = supabase.storage.from('resumes').getPublicUrl(filePath)
     const updatedAt = new Date().toISOString()
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const { data, error: upsertError } = await (supabase as any)
@@ -194,7 +194,8 @@ export default function ProfilePage() {
       .upsert(
         {
           seeker_id: user.id,
-          file_url: publicUrlData.publicUrl,
+          // 비공개 버킷 — URL 이 아닌 버킷 내 경로를 저장하고 열람 시 서명 URL 발급
+          file_url: filePath,
           updated_at: updatedAt,
         },
         { onConflict: 'seeker_id' }
@@ -419,14 +420,12 @@ export default function ProfilePage() {
                       {t('profile.resume_updated', { date: new Date(resume.updated_at).toLocaleDateString('ko-KR') })}
                     </p>
                   </div>
-                  <a
-                    href={resume.file_url}
-                    target="_blank"
-                    rel="noreferrer"
+                  <ResumeLink
+                    fileRef={resume.file_url}
                     className="inline-flex justify-center rounded-xl border border-gray-200 bg-white px-4 py-2.5 text-sm font-semibold text-gray-700 transition-colors hover:text-orange-500"
                   >
                     {t('profile.resume_view')}
-                  </a>
+                  </ResumeLink>
                 </div>
               ) : (
                 <div>

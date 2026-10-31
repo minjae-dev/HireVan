@@ -44,7 +44,39 @@ export function validateResumeFile(file: File): void {
   }
 }
 
-/** Supabase Storage 에 업로드 → public URL 발급 → resumes row upsert. */
+/**
+ * resumes.file_url / applications.resume_url 값 → 버킷 내 경로.
+ * 비공개 전환 전에는 public URL 을, 이후에는 경로를 저장하므로 둘 다 받는다.
+ */
+export function resumePath(ref: string | null | undefined): string | null {
+  if (!ref) return null
+  const m = ref.match(/\/storage\/v1\/object\/(?:public|sign)\/resumes\/([^?]+)/)
+  if (m) return decodeURIComponent(m[1])
+  return /^https?:\/\//.test(ref) ? null : ref
+}
+
+/**
+ * 짧은 수명의 서명 URL 로 이력서를 새 탭에 연다.
+ * 권한은 storage.objects SELECT 정책(본인 / 지원받은 공고의 사장님)이 판단한다.
+ * 팝업 차단을 피하려고 클릭 핸들러 안에서 빈 탭을 먼저 연다.
+ */
+export async function openResume(ref: string | null | undefined): Promise<void> {
+  const path = resumePath(ref)
+  const win = window.open('', '_blank')
+  if (!path) {
+    win?.close()
+    throw new Error('이력서 경로가 올바르지 않습니다.')
+  }
+  const { data, error } = await supabase.storage.from(RESUME_BUCKET).createSignedUrl(path, 60)
+  if (error || !data?.signedUrl) {
+    win?.close()
+    throw new Error('이력서를 열 권한이 없거나 파일이 없습니다.')
+  }
+  if (win) win.location.href = data.signedUrl
+  else window.location.href = data.signedUrl
+}
+
+/** Supabase Storage 에 업로드 → resumes row upsert (file_url 에는 버킷 내 경로 저장). */
 export async function uploadResume(
   userId: string,
   file: File,
@@ -69,7 +101,6 @@ export async function uploadResume(
     throw new Error('이력서 업로드에 실패했어요. 잠시 후 다시 시도해주세요.')
   }
 
-  const { data: publicUrlData } = supabase.storage.from(RESUME_BUCKET).getPublicUrl(filePath)
   const updatedAt = new Date().toISOString()
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -78,7 +109,7 @@ export async function uploadResume(
     .upsert(
       {
         seeker_id: userId,
-        file_url: publicUrlData.publicUrl,
+        file_url: filePath,
         updated_at: updatedAt,
       },
       { onConflict: 'seeker_id' },
