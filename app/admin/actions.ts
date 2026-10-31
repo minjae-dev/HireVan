@@ -124,15 +124,10 @@ export async function sendBulkNotification(input: {
   type?: string
 }) {
   try {
-    // [중요] 쿠키 기반의 requireAdmin()을 거치지 않습니다!
-    // 대신 Service Role 클라이언트를 사용하여 시스템적으로 처리합니다.
+    // Server Action 은 공개 POST 엔드포인트라 반드시 관리자 확인이 필요하다
+    await requireAdmin();
     const adminClient = requireSupabaseAdmin();
 
-    // 1. 관리자 권한 확인 (쿠키 없이 DB 조회로 보안 유지)
-    // 현재 접속한 관리자의 세션 정보를 확인할 방법이 없으니, 
-    // 관리자 페이지에 접근 가능한 상태인지만 체크합니다.
-    // (보안이 중요하다면 여기 특정 ID나 이메일 검증 로직을 넣으세요)
-    
     // 2. 타겟 사용자 조회 (adminClient 사용으로 RLS 우회)
     let query = adminClient.from('profiles').select('id');
     if (input.target !== 'all') {

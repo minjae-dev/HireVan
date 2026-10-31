@@ -67,35 +67,35 @@ export async function POST(request: NextRequest) {
   }
   const callerRole = (callerProfile as { role: 'employer' | 'seeker' }).role
 
-  let employerId: string
-  if (callerRole === 'employer') {
-    employerId = callerId
-  } else if (callerRole === 'seeker') {
-    if (callerId !== seekerId) {
-      return NextResponse.json(
-        { error: 'seekers can only create their own rooms' },
-        { status: 403 },
-      )
-    }
-    // job_post 의 employer_id 를 알아내야 함
-    const { data: job } = await supabase
-      .from('job_posts')
-      .select('employer_id')
-      .eq('id', jobPostId)
-      .maybeSingle()
-    if (!job) {
-      return NextResponse.json({ error: 'job_not_found' }, { status: 404 })
-    }
-    employerId = (job as { employer_id: string }).employer_id
-  } else {
+  if (callerRole !== 'employer' && callerRole !== 'seeker') {
     return NextResponse.json({ error: 'unsupported_role' }, { status: 403 })
   }
+  if (callerRole === 'seeker' && callerId !== seekerId) {
+    return NextResponse.json(
+      { error: 'seekers can only create their own rooms' },
+      { status: 403 },
+    )
+  }
+
+  // employer 는 자기 공고에 대해서만 방을 열 수 있다
+  const { data: job } = await supabase
+    .from('job_posts')
+    .select('employer_id')
+    .eq('id', jobPostId)
+    .maybeSingle()
+  const jobEmployerId = (job as { employer_id: string | null } | null)?.employer_id
+  if (!jobEmployerId) {
+    return NextResponse.json({ error: 'job_not_found' }, { status: 404 })
+  }
+  if (callerRole === 'employer' && jobEmployerId !== callerId) {
+    return NextResponse.json({ error: 'not_job_owner' }, { status: 403 })
+  }
+  const employerId = jobEmployerId
 
   // 4) 중복 room 조회 (idempotent)
   const { data: existing } = await supabase
     .from('chat_rooms')
     .select('*')
-    .eq('employer_id', employerId)
     .eq('seeker_id', seekerId)
     .eq('job_post_id', jobPostId)
     .maybeSingle()
@@ -105,15 +105,25 @@ export async function POST(request: NextRequest) {
   }
 
   // 5) INSERT — 트리거가 notification_logs + pg_notify 발행
+  //    (job_post_id, seeker_id) unique 로 동시 요청 시 1건만 생성, 나머지는 기존 방 반환
   const { data: room, error: insertErr } = await supabase
     .from('chat_rooms')
-    .insert({
-      employer_id: employerId,
-      seeker_id: seekerId,
-      job_post_id: jobPostId,
-    })
+    .upsert(
+      { employer_id: employerId, seeker_id: seekerId, job_post_id: jobPostId },
+      { onConflict: 'job_post_id,seeker_id', ignoreDuplicates: true },
+    )
     .select('*')
-    .single()
+    .maybeSingle()
+
+  if (!insertErr && !room) {
+    const { data: raced } = await supabase
+      .from('chat_rooms')
+      .select('*')
+      .eq('job_post_id', jobPostId)
+      .eq('seeker_id', seekerId)
+      .single()
+    return NextResponse.json({ room: raced, created: false }, { status: 200 })
+  }
 
   if (insertErr || !room) {
     return NextResponse.json(

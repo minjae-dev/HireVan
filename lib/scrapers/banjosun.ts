@@ -2,6 +2,7 @@ import { fetch } from 'undici';
 import { requireSupabaseAdmin } from '@/lib/supabase-admin';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import * as cheerio from 'cheerio';
+import { normalizePhone } from '@/lib/phone';
 export interface ParsedJob {
   bdId: string
   companyName: string
@@ -122,7 +123,7 @@ export async function fetchBdIds(page: number): Promise<string[]> {
   $('tr.marketListTr.job_findworker a[href*="bdId="]').each((_, element) => {
     const url = new URL($(element).attr('href')!, FRAME_URL)
     const bdId = url.searchParams.get('bdId')
-    if (bdId && !includesAdKeyword(bdId)) bdIds.push(bdId)
+    if (bdId) bdIds.push(bdId)
   })
   return Array.from(new Set(bdIds))
 }
@@ -181,36 +182,42 @@ export async function runPipeline(pages = 2) {
     }
     if (!parsed) continue
 
-      const { data: existing } = await supabase
-        .from('job_posts')
-        .select('id')
-        .eq('source', 'banjosun')
-        .eq('title', parsed.title)
-        .limit(1)
+    // 광고 판정은 숫자 bdId가 아니라 제목/본문으로
+    if (includesAdKeyword(parsed.title) || includesAdKeyword(parsed.description)) {
+      console.log(`🚫 광고 스킵: ${parsed.title}`)
+      continue
+    }
 
-      if (existing && existing.length > 0) {
-        console.log(`⏭️ 중복 스킵: ${parsed.title}`)
-        continue
-      }
+    const phone = normalizePhone(parsed.contact_phone)
+    if (!phone) {
+      console.log(`⏭️ 전화번호 없음/형식 오류 스킵: ${parsed.title}`)
+      continue
+    }
 
-      const { error } = await supabase.from('job_posts').insert({
+      // hivan vcs-job(makeUrl)과 같은 URL 형식이어야 source_url unique 인덱스로 교차 중복이 걸러진다
+      const sourceUrl = `${FRAME_URL}?main=job&cpage1=1&bdId=${parsed.bdId}`
+
+      const { data: inserted, error } = await supabase.from('job_posts').upsert({
         title: parsed.title,
         description: parsed.description,
         location: parsed.location,
         category: mapCategory(parsed.category),
         company_name: parsed.companyName || null,
-        contact_phone: parsed.contact_phone, 
+        contact_phone: phone,
         contact_email: parsed.contact_email,
         source: 'banjosun',
+        source_url: sourceUrl,
         status: 'pending_activation',
         employer_id: null
-      })
+      }, { onConflict: 'source_url', ignoreDuplicates: true }).select('id')
 
       if (error) {
         console.error(`❌ 삽입 실패 (${parsed.title}):`, error.message)
+      } else if (!inserted || inserted.length === 0) {
+        console.log(`⏭️ 중복 스킵: ${parsed.title}`)
       } else {
         console.log(`✅ 삽입 성공: ${parsed.title}`)
-        newJobs.push({ title: parsed.title, contact_phone: parsed.contact_phone })
+        newJobs.push({ title: parsed.title, contact_phone: phone })
       }
     }
   }

@@ -121,34 +121,29 @@ export async function acceptApplication(input: {
   seekerId: string
   employerId: string
 }): Promise<string> {
-  // 1) 기존 채팅방 확인
-  const { data: existing } = await supabase
+  // 1) 채팅방 확보 — (job_post_id, seeker_id) unique 로 중복 클릭/동시 요청에도 1개만 생성
+  const { error: roomError } = await supabase
     .from('chat_rooms')
-    .select('id')
-    .eq('job_post_id', input.jobId)
-    .eq('seeker_id', input.seekerId)
-    .maybeSingle()
-
-  let chatRoomId: string
-  const existingRow = existing as unknown as { id: string } | null
-  if (existingRow?.id) {
-    chatRoomId = existingRow.id
-  } else {
-    const { data: newRoom, error: roomError } = await supabase
-      .from('chat_rooms')
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      .insert({
+    .upsert(
+      {
         job_post_id: input.jobId,
         employer_id: input.employerId,
         seeker_id: input.seekerId,
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      } as any)
-      .select('id')
-      .single()
-    if (roomError) throw roomError
-    if (!newRoom) throw new Error('채팅방 생성에 실패했어요.')
-    chatRoomId = (newRoom as { id: string }).id
-  }
+      } as any,
+      { onConflict: 'job_post_id,seeker_id', ignoreDuplicates: true },
+    )
+  if (roomError) throw roomError
+
+  const { data: room, error: fetchError } = await supabase
+    .from('chat_rooms')
+    .select('id')
+    .eq('job_post_id', input.jobId)
+    .eq('seeker_id', input.seekerId)
+    .single()
+  if (fetchError) throw fetchError
+  if (!room) throw new Error('채팅방 생성에 실패했어요.')
+  const chatRoomId = (room as { id: string }).id
 
   // 2) 지원 status = 'accepted'
   const { error: updateError } = await supabase
