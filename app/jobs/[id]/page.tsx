@@ -6,6 +6,7 @@ import { supabase } from '@/lib/supabase'
 import Link from 'next/link'
 import { useParams, useRouter } from 'next/navigation'
 import { useEffect, useState } from 'react'
+import ResumeLink from '@/components/ResumeLink'
 
 type CustomQuestion = {
   id: string
@@ -244,12 +245,13 @@ export default function JobDetailPage() {
     }
 
     const message = customMessage ?? (() => {
-      const resumeUrl = appData?.resume_url ?? '미첨부'
+      // 이력서는 비공개 버킷 — 채팅에는 링크 대신 첨부 여부만 남기고 지원서 화면에서 연다
+      const resumeText = appData?.resume_url ? '첨부됨 (지원서에서 확인)' : '미첨부'
       const customAnswers = parseCustomAnswers(appData?.custom_answers ?? null)
       const qaText = customAnswers.length > 0
         ? '\n' + customAnswers.map(a => `❓ Q: ${a.question}\n➡️ A: ${a.answer}`).join('\n\n')
         : ''
-      return `📢 지원이 수락되었습니다! 대화를 시작합니다.\n\n📄 이력서 URL: ${resumeUrl}${qaText}`
+      return `📢 지원이 수락되었습니다! 대화를 시작합니다.\n\n📄 이력서: ${resumeText}${qaText}`
     })()
 
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -776,14 +778,12 @@ function renderApplicationDetails(app: Application) {
   return (
     <div className="mb-3 space-y-3 rounded-xl bg-gray-50 p-3">
       {app.resume_url && (
-        <a
-          href={app.resume_url}
-          target="_blank"
-          rel="noreferrer"
+        <ResumeLink
+          fileRef={app.resume_url}
           className="inline-flex rounded-xl bg-white px-3 py-2 text-xs font-bold text-orange-600 shadow-sm"
         >
           제출 이력서 보기
-        </a>
+        </ResumeLink>
       )}
       {customAnswers.length > 0 && (
         <div className="space-y-2">
