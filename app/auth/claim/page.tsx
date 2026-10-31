@@ -164,7 +164,6 @@ function ClaimContent() {
         id: authUserId!,
         role: 'employer',
         name: editableName,
-        phone: null,
       })
 
         if (profileError) {

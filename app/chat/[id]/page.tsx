@@ -400,18 +400,17 @@ export default function ChatRoomPage() {
       }
       const statusUpdateContent = `${STATUS_UPDATE_PREFIX}${JSON.stringify(updatePayload)}`
 
-      const { data: seekerProfile } = await supabase
-        .from('profiles')
-        .select('no_show_count')
-        .eq('id', room.seeker_id)
-        .maybeSingle()
-
-      const currentCount = seekerProfile?.no_show_count ?? 0
-
-      await supabase
-        .from('profiles')
-        .update({ no_show_count: currentCount + 1 })
-        .eq('id', room.seeker_id)
+      // 타인 profiles 는 RLS 로 UPDATE 불가 — 서버 RPC 가 방 소유 검증 + 메시지당 1회 증가
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data: reported, error: reportError } = await (supabase as any).rpc('report_no_show', {
+        p_chat_room_id: id as string,
+        p_message_id: msg.id,
+      })
+      if (reportError) throw reportError
+      if (!reported) {
+        setShowNoShowConfirm(null)
+        return
+      }
 
       await supabase.from('messages').insert({
         chat_room_id: id as string,
