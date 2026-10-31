@@ -28,9 +28,9 @@ export default function AdminDashboardPage() {
         { count: openJobs },
         { data: recentUsers },
       ] = await Promise.all([
-        supabase.from('profiles').select('*', { count: 'exact', head: true }),
-        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'employer'),
-        supabase.from('profiles').select('*', { count: 'exact', head: true }).eq('role', 'seeker'),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'employer'),
+        supabase.from('profiles').select('id', { count: 'exact', head: true }).eq('role', 'seeker'),
         supabase.from('job_posts').select('*', { count: 'exact', head: true }),
         supabase.from('job_posts').select('*', { count: 'exact', head: true }).eq('status', 'open'),
         supabase

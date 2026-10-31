@@ -76,8 +76,9 @@ export function normalizeSeekerProfile(
  */
 export async function fetchOwnProfileRow(userId: string): Promise<Record<string, unknown> | null> {
   if (!userId) return null
-  const { data, error } = await supabase
-    .from('profiles')
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const { data, error } = await (supabase as any)
+    .from('my_profile')
     .select('*')
     .eq('id', userId)
     .maybeSingle()

@@ -1,8 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
-import { toggleAdminStatus, deleteUser } from '../actions'
+import { toggleAdminStatus, deleteUser, listMembers } from '../actions'
 
 type Member = {
   id: string
@@ -21,13 +20,9 @@ export default function AdminMembersPage() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null)
 
   const fetchMembers = async () => {
-    const { data, error } = await supabase
-      .from('profiles')
-      .select('id, name, role, is_admin, created_at')
-      .order('created_at', { ascending: false })
-
-    if (!error && data) {
-      setMembers(data as Member[])
+    const result = await listMembers()
+    if (result.success) {
+      setMembers(result.members as Member[])
     }
     setLoading(false)
   }

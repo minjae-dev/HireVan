@@ -80,8 +80,9 @@ export default function EditProfilePage() {
 
     const fetchProfile = async () => {
       setFetching(true)
-      const { data } = await supabase
-        .from('profiles')
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const { data } = await (supabase as any)
+        .from('my_profile')
         .select('*')
         .eq('id', user.id)
         .maybeSingle()

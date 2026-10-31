@@ -32,12 +32,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   const fetchProfile = async (userId: string) => {
-    const { data } = await supabase
-      .from('profiles')
+    // profiles 는 타인용 공개 컬럼만 SELECT 가능 — 본인 전체 행은 my_profile 뷰
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data } = await (supabase as any)
+      .from('my_profile')
       .select('*')
       .eq('id', userId)
       .maybeSingle()
-    setProfile(data)
+    setProfile(data as Profile | null)
   }
 
   const refreshProfile = async () => {

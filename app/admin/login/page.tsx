@@ -28,8 +28,9 @@ export default function AdminLoginPage() {
     }
 
     // is_admin 확인
-    const { data: profile } = await supabase
-      .from('profiles')
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const { data: profile } = await (supabase as any)
+      .from('my_profile')
       .select('is_admin')
       .eq('id', data.user.id)
       .maybeSingle()

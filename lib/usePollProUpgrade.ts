@@ -132,7 +132,7 @@ export function usePollProUpgrade(
     try {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const { data, error: pErr } = await (supabase as any)
-        .from('profiles')
+        .from('my_profile')
         .select('pro_subscriber, plan')
         .eq('id', user.id)
         .maybeSingle()
